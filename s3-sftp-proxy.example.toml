@@ -1,0 +1,28 @@
+host_key_file = "./host_key"
+
+[buckets.test]
+bucket_url = "s3://BUCKET/PREFIX"
+# bucket = BUCKET
+# key_prefix = PREFIX
+profile = "xxx"
+region = "ap-northeast-1"
+auth = "test"
+
+# [buckets.test.credentials]
+# aws_access_key_id = "aaa"
+# aws_secret_access_key = "bbb"
+
+[auth.test]
+type = "inplace"
+
+[auth.test.users.user01]
+password = "test"
+public_keys = """
+...
+"""
+
+[auth.test.users.user02]
+password = "test"
+public_keys = """
+...
+"""

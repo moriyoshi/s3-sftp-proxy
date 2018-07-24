@@ -78,7 +78,7 @@ lister_lookback_buffer_size = 100
 
 * `buckets` (required)
 
-	`buckets` contains records for bucket declarations.  See [Bucket Settings](#bucket-configuration) for detail.
+	`buckets` contains records for bucket declarations.  See [Bucket Settings](#bucket-settings) for detail.
 
 * `auth`
 

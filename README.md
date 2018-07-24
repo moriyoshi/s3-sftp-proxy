@@ -193,7 +193,7 @@ type = "inplace"
 
 #### In-place authenticator
 
-In-place authenticator reads the credentials directly embedded in the configuration file.  The user record looks like the followings:
+In-place authenticator reads the credentials directly embedded in the configuration file.  The user record looks like the following:
 
 ```toml
 [auth.test]
@@ -212,19 +212,17 @@ public_keys = """
 ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 """
-...
 ```
 
 Or 
 
-```
+```toml
 [auth.test]
 type = "inplace"
 
 [auth.test.users]
 user0 = { password="test", public_keys="..." }
 user1 = { password="test", public_keys="..." }
-...
 ```
 
 * (key) (appears as `user0` or `user1` in the above example)

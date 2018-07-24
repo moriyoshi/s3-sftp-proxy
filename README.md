@@ -16,7 +16,7 @@ Usage of s3-sftp-proxy:
 
 * `-bind`
 
-	Specifies the local address and port to listen on.  This overrides the value of `bind` in the configuration file.  If it is not present in the configuration file either, it defauls to `:10022`.
+	Specifies the local address and port to listen on.  This overrides the value of `bind` in the configuration file.  If it is not present in the configuration file either, it defaults to `:10022`.
 
 * `-config`
 
@@ -76,11 +76,11 @@ lister_lookback_buffer_size = 100
 
 * `buckets` (required)
 
-	`buckets` contains records for bucket declarations.  See [Bucket Settings](#bucket_configuration) for detail.
+	`buckets` contains records for bucket declarations.  See [Bucket Settings](#bucket-configuration) for detail.
 
 * `auth`
 
-	`auth` contains records for authenticator configurations.  See [Authenticator Settings](#authenticator_settings) for detail.
+	`auth` contains records for authenticator configurations.  See [Authenticator Settings](#authenticator-settings) for detail.
 
 ### Bucket Settings
 

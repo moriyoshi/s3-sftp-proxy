@@ -29,6 +29,8 @@ Usage of s3-sftp-proxy:
  
 ## Configuation
 
+The configuration file is in [TOML](https://github.com/toml-lang/toml) format.  Refer to that page for the detailed explanation of the syntax.
+
 ### Top level
 
 ```toml
@@ -177,12 +179,7 @@ aws_secret_access_key = "bbb"
 [auth.test]
 type = "inplace"
 
-[auth.test.users.moriyoshi]
-password = "test"
-public_keys = """
-ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-"""
+# authenticator specific settings follow
 ```
 
 * `type` (required)
@@ -194,4 +191,51 @@ ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     Contains user records as a dictionary.
 
 
-TBD.
+#### In-place authenticator
+
+In-place authenticator reads the credentials directly embedded in the configuration file.  The user record looks like the followings:
+
+```toml
+[auth.test]
+type = "inplace"
+
+[auth.test.users.user0]
+password = "test"
+public_keys = """
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+"""
+
+[auth.test.users.user1]
+password = "test"
+public_keys = """
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+"""
+...
+```
+
+Or 
+
+```
+[auth.test]
+type = "inplace"
+
+[auth.test.users]
+user0 = { password="test", public_keys="..." }
+user1 = { password="test", public_keys="..." }
+...
+```
+
+* (key) (appears as `user0` or `user1` in the above example)
+
+    Specifies the name of the user.
+
+* `password` (optional)
+
+    Specifies the password in a clear-text form.
+
+* `public_keys` (optional)
+
+    Specifies the public keys authorized to use in authentication.  Multiple keys can be specified by delimiting them by newlines.
+

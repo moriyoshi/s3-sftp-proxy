@@ -119,3 +119,11 @@ func (bw *BytesWriter) Bytes() []byte {
 func IsEOF(e error) bool {
 	return e == io.EOF || e == io.ErrUnexpectedEOF
 }
+
+func IsTimeout(e error) bool {
+	t, ok := e.(interface{ Timeout() bool })
+	if ok {
+		return t.Timeout()
+	}
+	return false
+}

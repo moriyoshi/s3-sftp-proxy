@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -217,7 +216,7 @@ outer:
 		}
 	}
 
-	if os.IsTimeout(err) {
+	if IsTimeout(err) {
 		err = nil
 	}
 

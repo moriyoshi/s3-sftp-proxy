@@ -181,11 +181,15 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 
 func (s *Server) RunListenerEventLoop(ctx context.Context, lsnr *net.TCPListener) error {
 	defer s.Log.Debug("RunListenerEventLoop ended")
+
+	wg := sync.WaitGroup{}
 	connChan := make(chan *net.TCPConn)
 	var err error
 
+	wg.Add(1)
 	go func() {
 		defer s.Log.Debug("RunListenerEventLoop.connHandler ended")
+		defer wg.Done()
 		defer close(connChan)
 	outer:
 		for {
@@ -210,7 +214,9 @@ outer:
 			if conn == nil {
 				break outer
 			}
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				err := s.HandleClient(ctx, conn)
 				if err != nil {
 					s.Log.Error(err.Error())
@@ -221,6 +227,8 @@ outer:
 			break
 		}
 	}
+
+	wg.Wait()
 
 	if IsTimeout(err) {
 		err = nil

@@ -59,7 +59,11 @@ func buildSSHServerConfig(buckets *S3Buckets, cfg *S3SFTPProxyConfig) (*ssh.Serv
 				keyMarshaled := key.Marshal()
 				for _, herKey := range u.PublicKeys {
 					if herKey.Type() == key.Type() && len(herKey.Marshal()) == len(keyMarshaled) && bytes.Compare(herKey.Marshal(), keyMarshaled) == 0 {
-						return nil, nil
+						return &ssh.Permissions{
+							Extensions: map[string]string{
+								"pubkey-fp": ssh.FingerprintSHA256(key),
+							},
+						}, nil
 					}
 				}
 			}

@@ -186,14 +186,20 @@ func (s *Server) RunListenerEventLoop(ctx context.Context, lsnr *net.TCPListener
 
 	go func() {
 		defer s.Log.Debug("RunListenerEventLoop.connHandler ended")
+		defer close(connChan)
+	outer:
 		for {
 			var conn *net.TCPConn
 			conn, err = lsnr.AcceptTCP()
 			if err != nil {
-				close(connChan)
 				return
 			}
-			connChan <- conn
+			select {
+			case <-ctx.Done():
+				conn.Close()
+				break outer
+			case connChan <- conn:
+			}
 		}
 	}()
 

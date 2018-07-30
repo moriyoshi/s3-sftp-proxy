@@ -107,6 +107,14 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	}()
 	F(s.Log.Info, "connected from client %s", conn.RemoteAddr().String())
 
+	innerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		<-innerCtx.Done()
+		conn.SetDeadline(time.Unix(1, 0))
+	}()
+
 	// Before use, a handshake must be performed on the incoming net.Conn.
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, s.ServerConfig)
 	if err != nil {
@@ -121,21 +129,11 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 
 	wg := sync.WaitGroup{}
 
-	innerCtx, cancel := context.WithCancel(ctx)
-
 	wg.Add(1)
 	go func(reqs <-chan *ssh.Request) {
 		defer wg.Done()
-		defer cancel()
 		defer s.Log.Debug("HandleClient.requestHandler ended")
-	outer:
-		for {
-			select {
-			case <-innerCtx.Done():
-				break outer
-			case <-reqs:
-				break
-			}
+		for _ = range reqs {
 		}
 	}(reqs)
 
@@ -144,34 +142,25 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 		defer wg.Done()
 		defer cancel()
 		defer s.Log.Debug("HandleClient.channelHandler ended")
-	outer:
-		for {
-			select {
-			case <-innerCtx.Done():
-				break outer
-			case newSSHCh := <-chans:
-				if newSSHCh == nil {
-					break outer
-				}
-				if newSSHCh.ChannelType() != "session" {
-					newSSHCh.Reject(ssh.UnknownChannelType, "unknown channel type")
-					F(s.Log.Info, "unknown channel type: %s", newSSHCh.ChannelType())
-					continue
-				}
-				F(s.Log.Info, "channel: %s", newSSHCh.ChannelType())
-
-				sshCh, reqs, err := newSSHCh.Accept()
-				if err != nil {
-					F(s.Log.Error, "could not accept channel", err.Error())
-					break outer
-				}
-
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					s.HandleChannel(ctx, bucket, sshCh, reqs)
-				}()
+		for newSSHCh := range chans {
+			if newSSHCh.ChannelType() != "session" {
+				newSSHCh.Reject(ssh.UnknownChannelType, "unknown channel type")
+				F(s.Log.Info, "unknown channel type: %s", newSSHCh.ChannelType())
+				continue
 			}
+			F(s.Log.Info, "channel: %s", newSSHCh.ChannelType())
+
+			sshCh, reqs, err := newSSHCh.Accept()
+			if err != nil {
+				F(s.Log.Error, "could not accept channel", err.Error())
+				break
+			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				s.HandleChannel(ctx, bucket, sshCh, reqs)
+			}()
 		}
 	}(chans)
 
@@ -211,9 +200,6 @@ outer:
 	for {
 		select {
 		case conn := <-connChan:
-			if conn == nil {
-				break outer
-			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -224,8 +210,12 @@ outer:
 			}()
 		case <-ctx.Done():
 			lsnr.SetDeadline(time.Unix(1, 0))
-			break
+			break outer
 		}
+	}
+
+	// drain
+	for _ = range connChan {
 	}
 
 	wg.Wait()

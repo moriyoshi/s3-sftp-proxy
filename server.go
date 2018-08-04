@@ -159,7 +159,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				s.HandleChannel(ctx, bucket, sshCh, reqs)
+				s.HandleChannel(innerCtx, bucket, sshCh, reqs)
 			}()
 		}
 	}(chans)

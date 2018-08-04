@@ -342,13 +342,13 @@ func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 	if sol.continuation == nil {
 		sol.spooled = append(sol.spooled, &ObjectFileInfo{
 			_Name:         ".",
-			_LastModified: time.Time{},
+			_LastModified: time.Unix(1, 0),
 			_Size:         0,
 			_Mode:         0755 | os.ModeDir,
 		})
 		sol.spooled = append(sol.spooled, &ObjectFileInfo{
 			_Name:         "..",
-			_LastModified: time.Time{},
+			_LastModified: time.Unix(1, 0),
 			_Size:         0,
 			_Mode:         0755 | os.ModeDir,
 		})
@@ -390,7 +390,7 @@ func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 		for _, cPfx := range out.CommonPrefixes {
 			sol.spooled = append(sol.spooled, &ObjectFileInfo{
 				_Name:         path.Base(*cPfx.Prefix),
-				_LastModified: time.Time{},
+				_LastModified: time.Unix(1, 0),
 				_Size:         0,
 				_Mode:         0755 | os.ModeDir,
 			})

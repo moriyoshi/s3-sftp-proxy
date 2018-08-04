@@ -242,7 +242,7 @@ func (ofi *ObjectFileInfo) IsDir() bool {
 }
 
 func (ofi *ObjectFileInfo) Sys() interface{} {
-	return ofi
+	return BuildFakeFileInfoSys()
 }
 
 type S3ObjectLister struct {

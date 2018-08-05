@@ -61,14 +61,15 @@ type Perms struct {
 }
 
 type S3Bucket struct {
-	Name                 string
-	AWSConfig            *aws.Config
-	Bucket               string
-	KeyPrefix            Path
-	MaxObjectSize        int64
-	Users                UserStore
-	Perms                Perms
-	ServerSideEncryption ServerSideEncryptionConfig
+	Name                           string
+	AWSConfig                      *aws.Config
+	Bucket                         string
+	KeyPrefix                      Path
+	MaxObjectSize                  int64
+	Users                          UserStore
+	Perms                          Perms
+	ServerSideEncryption           ServerSideEncryptionConfig
+	KeyboardInteractiveAuthEnabled bool
 }
 
 type S3Buckets struct {
@@ -165,6 +166,7 @@ func buildS3Bucket(uStores UserStores, name string, bCfg *S3BucketConfig) (*S3Bu
 			CustomerKeyMD5: customerKeyMD5,
 			KMSKeyId:       bCfg.SSEKMSKeyId,
 		},
+		KeyboardInteractiveAuthEnabled: bCfg.KeyboardInteractiveAuthEnabled,
 	}, nil
 }
 

@@ -69,6 +69,27 @@ func buildSSHServerConfig(buckets *S3Buckets, cfg *S3SFTPProxyConfig) (*ssh.Serv
 			}
 			return nil, fmt.Errorf("public keys do not match")
 		},
+		KeyboardInteractiveCallback: func(c ssh.ConnMetadata, client ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
+			bucket, ok := buckets.UserToBucketMap[c.User()]
+			if !ok {
+				return nil, fmt.Errorf("unknown user: %s", c.User())
+			}
+			if !bucket.KeyboardInteractiveAuthEnabled {
+				return nil, fmt.Errorf("keyboard interactive authentication not enabled")
+			}
+			u := bucket.Users.Lookup(c.User())
+			if u.Password == "" {
+				return nil, fmt.Errorf("no credentials are present")
+			}
+			answers, err := client(u.Name, "", []string{"Password: "}, []bool{false})
+			if err != nil {
+				return nil, errors.Wrapf(err, "keyboard interactive conversation failed")
+			}
+			if answers[0] != u.Password {
+				return nil, fmt.Errorf("passwords do not match")
+			}
+			return nil, nil
+		},
 		BannerCallback: func(c ssh.ConnMetadata) string {
 			return cfg.Banner
 		},
@@ -145,9 +166,9 @@ func main() {
 	errChan := make(chan error)
 	go func() {
 		errChan <- (&Server{
-			S3Buckets:    buckets,
-			ServerConfig: sCfg,
-			Log:          logger,
+			S3Buckets:                buckets,
+			ServerConfig:             sCfg,
+			Log:                      logger,
 			ReaderLookbackBufferSize: *cfg.ReaderLookbackBufferSize,
 			ReaderMinChunkSize:       *cfg.ReaderMinChunkSize,
 			ListerLookbackBufferSize: *cfg.ListerLookbackBufferSize,

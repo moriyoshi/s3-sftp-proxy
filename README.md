@@ -102,6 +102,7 @@ server_side_encryption = "kms"
 sse_customer_algorithm = ""
 sse_customer_key = ""
 sse_kms_key_id = ""
+keyboard_interactive_auth = false
 
 [buckets.test.credentials]
 aws_access_key_id = "aaa"
@@ -167,6 +168,10 @@ aws_secret_access_key = "bbb"
 * `sse_kms_key_id` (required when `server_side_encryption` is est to `"kms"`)
 
 	Specifies the CMK ID used for the server-side encryption using KMS.
+
+* `keyboard_interactive_auth` (optional, defaults to `false`)
+
+    Enables keyboard interactive authentication if set to true.
 
 * `auth` (required)
 

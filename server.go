@@ -42,6 +42,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 		sshCh,
 		asHandlers(
 			&S3BucketIO{
+				Ctx:    ctx,
 				Bucket: bucket,
 				ReaderLookbackBufferSize: s.ReaderLookbackBufferSize,
 				ReaderMinChunkSize:       s.ReaderMinChunkSize,

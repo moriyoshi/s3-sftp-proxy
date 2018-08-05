@@ -529,6 +529,7 @@ func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
 }
 
 type S3BucketIO struct {
+	Ctx                      context.Context
 	Bucket                   *S3Bucket
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
@@ -572,7 +573,7 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 	}
 
 	keyStr := key.String()
-	ctx := req.Context()
+	ctx := combineContext(s3io.Ctx, req.Context())
 	F(s3io.Log.Debug, "GetObject(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, keyStr)
 	sse := s3io.ServerSideEncryption
 	goo, err := s3.GetObjectWithContext(
@@ -617,7 +618,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 	}
 	F(s3io.Log.Debug, "S3PutObjectWriter.New(key=%s)", key)
 	oow := &S3PutObjectWriter{
-		Ctx:                  req.Context(),
+		Ctx:                  combineContext(s3io.Ctx, req.Context()),
 		Bucket:               s3io.Bucket.Bucket,
 		Key:                  key,
 		S3:                   s3io.Bucket.S3(sess),
@@ -654,7 +655,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		sse := s3io.ServerSideEncryption
 		F(s3io.Log.Debug, "CopyObject(Bucket=%s, Key=%s, CopySource=%s, Sse=%v)", s3io.Bucket.Bucket, destStr, copySource, sse.Type)
 		_, err = s3io.Bucket.S3(sess).CopyObjectWithContext(
-			req.Context(),
+			combineContext(s3io.Ctx, req.Context()),
 			&aws_s3.CopyObjectInput{
 				ACL:                  &aclPrivate,
 				Bucket:               &s3io.Bucket.Bucket,
@@ -673,7 +674,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		}
 		F(s3io.Log.Debug, "DeleteObject(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, srcStr)
 		_, err = s3io.Bucket.S3(sess).DeleteObjectWithContext(
-			req.Context(),
+			combineContext(s3io.Ctx, req.Context()),
 			&aws_s3.DeleteObjectInput{
 				Bucket: &s3io.Bucket.Bucket,
 				Key:    &srcStr,
@@ -698,7 +699,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		keyStr := key.String()
 		F(s3io.Log.Debug, "DeleteObject(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, key)
 		_, err = s3io.Bucket.S3(sess).DeleteObjectWithContext(
-			req.Context(),
+			combineContext(s3io.Ctx, req.Context()),
 			&aws_s3.DeleteObjectInput{
 				Bucket: &s3io.Bucket.Bucket,
 				Key:    &keyStr,
@@ -725,7 +726,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 		key := buildKey(s3io.Bucket, req.Filepath)
 		return &S3ObjectStat{
 			DebugLogger:      s3io.Log,
-			Ctx:              req.Context(),
+			Ctx:              combineContext(s3io.Ctx, req.Context()),
 			Bucket:           s3io.Bucket.Bucket,
 			Key:              key,
 			S3:               s3io.Bucket.S3(sess),
@@ -737,7 +738,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 		}
 		return &S3ObjectLister{
 			DebugLogger:      s3io.Log,
-			Ctx:              req.Context(),
+			Ctx:              combineContext(s3io.Ctx, req.Context()),
 			Bucket:           s3io.Bucket.Bucket,
 			Prefix:           buildKey(s3io.Bucket, req.Filepath),
 			S3:               s3io.Bucket.S3(sess),

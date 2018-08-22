@@ -99,7 +99,6 @@ readable = true
 listable = true
 auth = "test"
 server_side_encryption = "kms"
-sse_customer_algorithm = ""
 sse_customer_key = ""
 sse_kms_key_id = ""
 keyboard_interactive_auth = false

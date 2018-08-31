@@ -263,7 +263,7 @@ func aclToMode(owner *aws_s3.Owner, grants []*aws_s3.Grant) os.FileMode {
 	var v os.FileMode
 	for _, g := range grants {
 		if g.Grantee != nil {
-			if *g.Grantee.ID == *owner.ID {
+			if g.Grantee.ID != nil && *g.Grantee.ID == *owner.ID {
 				switch *g.Permission {
 				case "READ":
 					v |= 0400

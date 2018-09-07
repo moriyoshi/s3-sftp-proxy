@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/BurntSushi/toml"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/url"
+	"os"
+
+	"github.com/BurntSushi/toml"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -194,12 +196,15 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 }
 
 func ReadConfigFromFile(tomlFile string) (*S3SFTPProxyConfig, error) {
-	tomlStr, err := ioutil.ReadFile(tomlFile)
+	tomlBytes, err := ioutil.ReadFile(tomlFile)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open %s", tomlFile)
 	}
 
-	cfg, err := ReadConfig(string(tomlStr))
+	tomlBytes := os.ExpandEnv(string(tomlBytes))
+
+	cfg, err := ReadConfig(string(tomlBytes))
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s", tomlFile)
 	}

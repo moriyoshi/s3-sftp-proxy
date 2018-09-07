@@ -201,7 +201,7 @@ func ReadConfigFromFile(tomlFile string) (*S3SFTPProxyConfig, error) {
 		return nil, errors.Wrapf(err, "failed to open %s", tomlFile)
 	}
 
-	tomlBytes := os.ExpandEnv(string(tomlBytes))
+	tomlBytes = os.ExpandEnv(string(tomlBytes))
 
 	cfg, err := ReadConfig(string(tomlBytes))
 

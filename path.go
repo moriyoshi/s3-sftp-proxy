@@ -142,3 +142,15 @@ func (p Path) Base() string {
 		return p[len(p)-1]
 	}
 }
+
+func (p Path) Equal(p2 Path) bool {
+	if len(p) != len(p2) {
+		return false
+	}
+	for i := 0; i < len(p); i++ {
+		if p[i] != p2[i] {
+			return false
+		}
+	}
+	return true
+}

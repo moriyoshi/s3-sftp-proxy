@@ -431,6 +431,7 @@ type S3ObjectStat struct {
 	Ctx              context.Context
 	Bucket           string
 	Key              Path
+	Root             bool
 	S3               *aws_s3.S3
 	PhantomObjectMap *PhantomObjectMap
 }
@@ -511,7 +512,7 @@ func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
 						Delimiter: aws.String("/"),
 					},
 				)
-				if err != nil || len(out.CommonPrefixes) == 0 {
+				if err != nil || (!sos.Root && len(out.CommonPrefixes) == 0) {
 					sos.Debug("=> ", err)
 					return 0, os.ErrNotExist
 				}
@@ -728,6 +729,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 			DebugLogger:      s3io.Log,
 			Ctx:              combineContext(s3io.Ctx, req.Context()),
 			Bucket:           s3io.Bucket.Bucket,
+			Root:             key.Equal(s3io.Bucket.KeyPrefix),
 			Key:              key,
 			S3:               s3io.Bucket.S3(sess),
 			PhantomObjectMap: s3io.PhantomObjectMap,

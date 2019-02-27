@@ -88,6 +88,9 @@ lister_lookback_buffer_size = 100
 
 ```toml
 [buckets.test]
+endpoint = "http://endpoint"
+s3_force_path_style = true
+disable_ssl = false
 bucket = "BUCKET"
 key_prefix = "PREFIX"
 bucket_url = "s3://BUCKET/PREFIX"
@@ -107,6 +110,17 @@ keyboard_interactive_auth = false
 aws_access_key_id = "aaa"
 aws_secret_access_key = "bbb"
 ```
+
+* `endpoint` (optional)
+	Specifies s3 endpoint (server) different from AWS.
+
+* `s3_force_path_style` (optional)
+    This option should be set to `true` if ypu use endpount different from AWS.
+    
+	Set this to `true` to force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`).
+
+* `disable_ssl` (optional)
+	Set this to `true` to disable SSL when sending requests.
 
 * `bucket` (required when `bucket_url` is unspecified)
 

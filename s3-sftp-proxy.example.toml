@@ -1,6 +1,9 @@
 host_key_file = "./host_key"
 
 [buckets.test]
+# endpoint = "http://endpoint"
+# s3_force_path_style = false
+# disable_ssl = false
 bucket_url = "s3://BUCKET/PREFIX"
 # bucket = BUCKET
 # key_prefix = PREFIX

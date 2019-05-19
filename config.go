@@ -34,8 +34,8 @@ type S3BucketConfig struct {
 	Credentials                    *AWSCredentialsConfig    `toml:"credentials"`
 	Region                         string                   `toml:"region"`
 	Endpoint                       string                   `toml:"endpoint"`
-	DisableSSL					   *bool						`toml:"disable_ssl"`
-	S3ForcePathStyle               *bool                     `toml:"s3_force_path_style"`
+	DisableSSL                     *bool                    `toml:"disable_ssl"`
+	S3ForcePathStyle               *bool                    `toml:"s3_force_path_style"`
 	Bucket                         string                   `toml:"bucket"`
 	KeyPrefix                      string                   `toml:"key_prefix"`
 	BucketUrl                      *URL                     `toml:"bucket_url"`

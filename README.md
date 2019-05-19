@@ -66,7 +66,7 @@ lister_lookback_buffer_size = 100
 
 * `reader_lookback_buffer_size` (optional, defaults to `1048576`)
 
-	Specifies the size of the buffer used to keep several amount of the data read from S3 for later access to it.  The reason why such buffer is necessary is that SFTP protocol requires the data should be sent or retrieved on a random-access basis (i.e. each request contains an offset) while those coming from S3 is actually fetched in a streaming manner.   In that we have to emulate block storage access for S3 objects, but chances are we don't need to hold the entire data with the reasonable SFTP clients.
+	Specifies the size of the buffer used to keep several amounts of data read from S3 for later access to it.  The reason why such buffer is necessary is that SFTP protocol requires the data should be sent or retrieved on a random-access basis (i.e. each request contains an offset) while those coming from S3 is actually fetched in a streaming manner.   In that we have to emulate block storage access for S3 objects, but chances are we don't need to hold the entire data with the reasonable SFTP clients.
 
 * `reader_min_chunk_size` (optional, defaults to `262144`)
 

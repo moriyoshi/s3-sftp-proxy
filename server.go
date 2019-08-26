@@ -153,7 +153,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 
 			sshCh, reqs, err := newSSHCh.Accept()
 			if err != nil {
-				F(s.Log.Error, "could not accept channel", err.Error())
+				F(s.Log.Error, "could not accept channel: %s", err.Error())
 				break
 			}
 

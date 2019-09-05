@@ -710,6 +710,48 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			s3io.Log.Debug("=> ", err)
 			return err
 		}
+	case "Mkdir":
+		if !s3io.Perms.Writable {
+			return fmt.Errorf("write operation not allowed as per configuration")
+		}
+		key := buildKey(s3io.Bucket, req.Filepath)
+		keyStr := fmt.Sprintf("%s/", key.String())
+		sess, err := aws_session.NewSession()
+		if err != nil {
+			return err
+		}
+		F(s3io.Log.Debug, "Mkdir(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, keyStr)
+		_, err = s3io.Bucket.S3(sess).PutObject(
+			&aws_s3.PutObjectInput{
+				Bucket: &s3io.Bucket.Bucket,
+				Key:    &keyStr,
+			},
+		)
+		if err != nil {
+			s3io.Log.Debug("=> ", err)
+			return err
+		}
+	case "Rmdir":
+		if !s3io.Perms.Writable {
+			return fmt.Errorf("write operation not allowed as per configuration")
+		}
+		key := buildKey(s3io.Bucket, req.Filepath)
+		keyStr := fmt.Sprintf("%s/", key.String())
+		sess, err := aws_session.NewSession()
+		if err != nil {
+			return err
+		}
+		F(s3io.Log.Debug, "Rmdir(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, keyStr)
+		_, err = s3io.Bucket.S3(sess).DeleteObject(
+			&aws_s3.DeleteObjectInput{
+				Bucket: &s3io.Bucket.Bucket,
+				Key:    &keyStr,
+			},
+		)
+		if err != nil {
+			s3io.Log.Debug("=> ", err)
+			return err
+		}
 	}
 	return nil
 }

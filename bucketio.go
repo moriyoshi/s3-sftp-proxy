@@ -14,6 +14,7 @@ import (
 	aws_session "github.com/aws/aws-sdk-go/aws/session"
 	aws_s3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pkg/sftp"
+	"github.com/prometheus/client_golang/prometheus"
 	// s3crypto "github.com/aws/aws-sdk-go/service/s3/s3crypto"
 )
 
@@ -300,12 +301,16 @@ func aclToMode(owner *aws_s3.Owner, grants []*aws_s3.Grant) os.FileMode {
 }
 
 func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
+	lSuccess := prometheus.Labels{"method": "Ls", "status": "success"}
+	lFailure := prometheus.Labels{"method": "Ls", "status": "failure"}
 	_o, err := castInt64ToInt(o)
 	if err != nil {
+		mOperationStatus.With(lFailure).Inc()
 		return 0, err
 	}
 
 	if _o < sol.spoolOffset {
+		mOperationStatus.With(lFailure).Inc()
 		return 0, fmt.Errorf("supplied position is out of range")
 	}
 
@@ -327,6 +332,7 @@ func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 
 	if sol.noMore {
 		if i == 0 {
+			mOperationStatus.With(lSuccess).Inc()
 			return 0, io.EOF
 		} else {
 			return i, nil
@@ -382,6 +388,7 @@ func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 	)
 	if err != nil {
 		sol.Debug("=> ", err)
+		mOperationStatus.With(lFailure).Inc()
 		return i, err
 	}
 	F(sol.Debug, "=> { CommonPrefixes=len(%d), Contents=len(%d) }", len(out.CommonPrefixes), len(out.Contents))
@@ -438,16 +445,21 @@ type S3ObjectStat struct {
 
 func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
 	F(sos.Debug, "S3ObjectStat.ListAt: len(result)=%d offset=%d", len(result), o)
+	lFailure := prometheus.Labels{"method": "Stat", "status": "failure"}
+	lNoObject := prometheus.Labels{"method": "Stat", "status": "noSuchObject"}
 	_o, err := castInt64ToInt(o)
 	if err != nil {
+		mOperationStatus.With(lFailure).Inc()
 		return 0, err
 	}
 
 	if len(result) == 0 {
+		mOperationStatus.With(lFailure).Inc()
 		return 0, nil
 	}
 
 	if _o > 0 {
+		mOperationStatus.With(lFailure).Inc()
 		return 0, fmt.Errorf("supplied position is out of range")
 	}
 
@@ -514,6 +526,7 @@ func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
 				)
 				if err != nil || (!sos.Root && len(out.CommonPrefixes) == 0) {
 					sos.Debug("=> ", err)
+					mOperationStatus.With(lNoObject).Inc()
 					return 0, os.ErrNotExist
 				}
 				F(sos.Debug, "=> { CommonPrefixes=len(%d), Contents=len(%d) }", len(out.CommonPrefixes), len(out.Contents))
@@ -558,11 +571,16 @@ func buildPath(s3b *S3Bucket, key string) (string, bool) {
 }
 
 func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
+	lSuccess := prometheus.Labels{"method": req.Method, "status": "success"}
+	lFailure := prometheus.Labels{"method": req.Method, "status": "failure"}
 	if !s3io.Perms.Readable {
+		mOperationStatus.With(lFailure).Inc()
 		return nil, fmt.Errorf("read operation not allowed as per configuration")
 	}
 	sess, err := aws_session.NewSession()
 	if err != nil {
+		mOperationStatus.With(lFailure).Inc()
+		mAWSSessionError.Inc()
 		return nil, err
 	}
 	s3 := s3io.Bucket.S3(sess)
@@ -588,23 +606,31 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 		},
 	)
 	if err != nil {
+		mOperationStatus.With(lFailure).Inc()
 		return nil, err
 	}
-	return &S3GetObjectOutputReader{
+	oor := &S3GetObjectOutputReader{
 		Ctx:          ctx,
 		Goo:          goo,
 		Log:          s3io.Log,
 		Lookback:     s3io.ReaderLookbackBufferSize,
 		MinChunkSize: s3io.ReaderMinChunkSize,
-	}, nil
+	}
+	mOperationStatus.With(lSuccess).Inc()
+	return oor, nil
 }
 
 func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
+	lSuccess := prometheus.Labels{"method": req.Method, "status": "success"}
+	lFailure := prometheus.Labels{"method": req.Method, "status": "failure"}
 	if !s3io.Perms.Writable {
+		mOperationStatus.With(lFailure).Inc()
 		return nil, fmt.Errorf("write operation not allowed as per configuration")
 	}
 	sess, err := aws_session.NewSession()
 	if err != nil {
+		mOperationStatus.With(lFailure).Inc()
+		mAWSSessionError.Inc()
 		return nil, err
 	}
 	maxObjectSize := s3io.Bucket.MaxObjectSize
@@ -632,22 +658,30 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 	}
 	info.Opaque = oow
 	s3io.PhantomObjectMap.Add(info)
+	mOperationStatus.With(lSuccess).Inc()
 	return oow, nil
 }
 
 func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
+	lSuccess := prometheus.Labels{"method": req.Method, "status": "success"}
+	lFailure := prometheus.Labels{"method": req.Method, "status": "failure"}
+	lIgnored := prometheus.Labels{"method": req.Method, "status": "ignored"}
 	switch req.Method {
 	case "Rename":
 		if !s3io.Perms.Writable {
+			mOperationStatus.With(lFailure).Inc()
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
 		src := buildKey(s3io.Bucket, req.Filepath)
 		dest := buildKey(s3io.Bucket, req.Target)
 		if s3io.PhantomObjectMap.Rename(src, dest) {
+			mOperationStatus.With(lIgnored).Inc()
 			return nil
 		}
 		sess, err := aws_session.NewSession()
 		if err != nil {
+			mOperationStatus.With(lFailure).Inc()
+			mAWSSessionError.Inc()
 			return err
 		}
 		srcStr := src.String()
@@ -671,6 +705,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		)
 		if err != nil {
 			s3io.Log.Debug("=> ", err)
+			mOperationStatus.With(lFailure).Inc()
 			return err
 		}
 		F(s3io.Log.Debug, "DeleteObject(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, srcStr)
@@ -683,18 +718,24 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		)
 		if err != nil {
 			s3io.Log.Debug("=> ", err)
+			mOperationStatus.With(lFailure).Inc()
 			return err
 		}
+		mOperationStatus.With(lSuccess).Inc()
 	case "Remove":
 		if !s3io.Perms.Writable {
+			mOperationStatus.With(lFailure).Inc()
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
 		key := buildKey(s3io.Bucket, req.Filepath)
 		if s3io.PhantomObjectMap.Remove(key) != nil {
+			mOperationStatus.With(lIgnored).Inc()
 			return nil
 		}
 		sess, err := aws_session.NewSession()
 		if err != nil {
+			mOperationStatus.With(lFailure).Inc()
+			mAWSSessionError.Inc()
 			return err
 		}
 		keyStr := key.String()
@@ -708,16 +749,21 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		)
 		if err != nil {
 			s3io.Log.Debug("=> ", err)
+			mOperationStatus.With(lFailure).Inc()
 			return err
 		}
+		mOperationStatus.With(lSuccess).Inc()
 	case "Mkdir":
 		if !s3io.Perms.Writable {
+			mOperationStatus.With(lFailure).Inc()
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
 		key := buildKey(s3io.Bucket, req.Filepath)
 		keyStr := fmt.Sprintf("%s/", key.String())
 		sess, err := aws_session.NewSession()
 		if err != nil {
+			mOperationStatus.With(lFailure).Inc()
+			mAWSSessionError.Inc()
 			return err
 		}
 		F(s3io.Log.Debug, "Mkdir(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, keyStr)
@@ -729,16 +775,21 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		)
 		if err != nil {
 			s3io.Log.Debug("=> ", err)
+			mOperationStatus.With(lFailure).Inc()
 			return err
 		}
+		mOperationStatus.With(lSuccess).Inc()
 	case "Rmdir":
 		if !s3io.Perms.Writable {
+			mOperationStatus.With(lFailure).Inc()
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
 		key := buildKey(s3io.Bucket, req.Filepath)
 		keyStr := fmt.Sprintf("%s/", key.String())
 		sess, err := aws_session.NewSession()
 		if err != nil {
+			mOperationStatus.With(lFailure).Inc()
+			mAWSSessionError.Inc()
 			return err
 		}
 		F(s3io.Log.Debug, "Rmdir(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, keyStr)
@@ -750,20 +801,25 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		)
 		if err != nil {
 			s3io.Log.Debug("=> ", err)
+			mOperationStatus.With(lFailure).Inc()
 			return err
 		}
+		mOperationStatus.With(lSuccess).Inc()
 	}
 	return nil
 }
 
 func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
+	lPermErr := prometheus.Labels{"method": req.Method}
 	sess, err := aws_session.NewSession()
 	if err != nil {
+		mAWSSessionError.Inc()
 		return nil, err
 	}
 	switch req.Method {
 	case "Stat", "ReadLink":
 		if !s3io.Perms.Readable && !s3io.Perms.Listable {
+			mPermissionsError.With(lPermErr).Inc()
 			return nil, fmt.Errorf("stat operation not allowed as per configuration")
 		}
 		key := buildKey(s3io.Bucket, req.Filepath)
@@ -778,6 +834,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 		}, nil
 	case "List":
 		if !s3io.Perms.Listable {
+			mPermissionsError.With(lPermErr).Inc()
 			return nil, fmt.Errorf("listing operation not allowed as per configuration")
 		}
 		return &S3ObjectLister{
@@ -790,6 +847,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 			PhantomObjectMap: s3io.PhantomObjectMap,
 		}, nil
 	default:
+		mPermissionsError.With(lPermErr).Inc()
 		return nil, fmt.Errorf("unsupported method: %s", req.Method)
 	}
 }

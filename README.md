@@ -259,8 +259,14 @@ user1 = { password="test", public_keys="..." }
 
 ### Prometheus metrics
 
-`sftp_operation_status` _(counter)_ Represents SFTP operation statuses count by method
+* `sftp_operation_status` _(counter)_
 
-`sftp_aws_session_error` _(counter)_ AWS S3 session errors count
+    Represents SFTP operation statuses count by method
 
-`sftp_permissions_error` _(counter)_ Bucket permission errors count by method
+* `sftp_aws_session_error` _(counter)_
+
+    AWS S3 session errors count
+
+* `sftp_permissions_error` _(counter)_
+
+    Bucket permission errors count by method

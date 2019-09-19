@@ -1,6 +1,6 @@
 # s3-sftp-proxy
 
-`s3-ftp-proxy` is a tiny program that exposes resources on your AWS S3 buckets through SFTP protocol.
+`s3-sftp-proxy` is a tiny program that exposes the resources on your AWS S3 buckets through SFTP protocol.
 
 ## Usage
 

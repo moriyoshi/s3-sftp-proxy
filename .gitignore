@@ -1,0 +1,4 @@
+host_key
+host_key.pub
+s3-sftp-proxy
+s3-sftp-proxy.toml

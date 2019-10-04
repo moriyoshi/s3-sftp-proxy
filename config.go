@@ -71,6 +71,8 @@ type S3SFTPProxyConfig struct {
 	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
 	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
 	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
+	MetricsBind              string                     `toml:"metrics_bind"`
+	MetricsEndpoint          string                     `toml:"metrics_endpoint"`
 }
 
 func validateAndFixupBucketConfig(bCfg *S3BucketConfig) error {

@@ -26,7 +26,7 @@ Usage of s3-sftp-proxy:
 
 	Turn on debug logging.  The output will be more verbose.
 
- 
+
 ## Configuation
 
 The configuration file is in [TOML](https://github.com/toml-lang/toml) format.  Refer to that page for the detailed explanation of the syntax.
@@ -42,6 +42,8 @@ Welcome to my SFTP server
 reader_lookback_buffer_size = 1048576
 reader_min_chunk_size = 262144
 lister_lookback_buffer_size = 100
+metrics_bind = ":2112"
+metrics_endpoint = "/metrics"
 
 # buckets and authantication settings follow...
 ```
@@ -116,7 +118,7 @@ aws_secret_access_key = "bbb"
 
 * `s3_force_path_style` (optional)
     This option should be set to `true` if ypu use endpount different from AWS.
-    
+
 	Set this to `true` to force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`).
 
 * `disable_ssl` (optional)
@@ -127,7 +129,7 @@ aws_secret_access_key = "bbb"
 	Specifies the bucket name.
 
 * `key_prefix` (required when `bucket_url` is unspecified)
-	
+
 	Specifies the prefix prepended to the file path sent from the client.  The key string is derived as follows:
 
 		`key` = `key_prefix` + `path`
@@ -147,11 +149,11 @@ aws_secret_access_key = "bbb"
 * `credentials` (optional)
 
     * `credentials.aws_access_key_id` (required)
-    
+
         Specifies the AWS access key.
 
     * `credentials.aws_secret_access_key` (required)
-    
+
         Specifies the AWS secret access key.
 
 * `max_object_size` (optional, defaults to unlimited)
@@ -232,7 +234,7 @@ ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 ```
 
-Or 
+Or
 
 ```toml
 [auth.test]
@@ -255,3 +257,16 @@ user1 = { password="test", public_keys="..." }
 
     Specifies the public keys authorized to use in authentication.  Multiple keys can be specified by delimiting them by newlines.
 
+### Prometheus metrics
+
+* `sftp_operation_status` _(counter)_
+
+    Represents SFTP operation statuses count by method
+
+* `sftp_aws_session_error` _(counter)_
+
+    AWS S3 session errors count
+
+* `sftp_permissions_error` _(counter)_
+
+    Bucket permission errors count by method

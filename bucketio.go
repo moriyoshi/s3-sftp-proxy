@@ -549,14 +549,6 @@ func buildKey(s3b *S3Bucket, path string) Path {
 	return s3b.KeyPrefix.Join(SplitIntoPath(path))
 }
 
-func buildPath(s3b *S3Bucket, key string) (string, bool) {
-	_key := SplitIntoPath(key)
-	if !_key.IsPrefixed(s3b.KeyPrefix) {
-		return "", false
-	}
-	return "/" + _key[len(s3b.KeyPrefix):].String(), true
-}
-
 func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 	if !s3io.Perms.Readable {
 		return nil, fmt.Errorf("read operation not allowed as per configuration")

@@ -4,7 +4,7 @@
 
 ## Usage
 
-```
+```bash
 Usage of s3-sftp-proxy:
   -bind string
         listen on addr:port
@@ -255,3 +255,17 @@ user1 = { password="test", public_keys="..." }
 
     Specifies the public keys authorized to use in authentication.  Multiple keys can be specified by delimiting them by newlines.
 
+## Example docker-compose usage
+
+```yaml
+version: '3.6'
+
+services:
+  s3proxy:
+    build: .
+    ports:
+      - 10022:10022
+    volumes:
+      - ./s3-sftp-proxy.toml:/app/s3-sftp-proxy.toml
+      - ./host_key:/app/host_key
+```

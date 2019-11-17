@@ -160,6 +160,7 @@ type S3PutObjectWriter struct {
 	ServerSideEncryption *ServerSideEncryptionConfig
 	Log                  interface {
 		DebugLogger
+		InfoLogger
 		ErrorLogger
 	}
 	MaxObjectSize    int64
@@ -437,7 +438,7 @@ type S3ObjectStat struct {
 }
 
 func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
-	F(sos.Debug, "S3ObjectStat.ListAt: len(result)=%d offset=%d", len(result), o)
+	F(sos.Debug, "S3ObjectStat.: len(result)=%d offset=%d", len(result), o)
 	_o, err := castInt64ToInt(o)
 	if err != nil {
 		return 0, err
@@ -541,8 +542,10 @@ type S3BucketIO struct {
 	Now                      func() time.Time
 	Log                      interface {
 		ErrorLogger
+		InfoLogger
 		DebugLogger
 	}
+	UserInfo *UserInfo
 }
 
 func buildKey(s3b *S3Bucket, path string) Path {
@@ -617,6 +620,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		Size:         0,
 		LastModified: s3io.Now(),
 	}
+	F(s3io.Log.Info, "Upload file %s by user %s", key, s3io.UserInfo.User)
 	F(s3io.Log.Debug, "S3PutObjectWriter.New(key=%s)", key)
 	oow := &S3PutObjectWriter{
 		Ctx:                  combineContext(s3io.Ctx, req.Context()),

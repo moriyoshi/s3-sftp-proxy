@@ -160,7 +160,6 @@ type S3PutObjectWriter struct {
 	ServerSideEncryption *ServerSideEncryptionConfig
 	Log                  interface {
 		DebugLogger
-		InfoLogger
 		ErrorLogger
 	}
 	MaxObjectSize    int64
@@ -542,7 +541,7 @@ type S3BucketIO struct {
 	Now                      func() time.Time
 	Log                      interface {
 		ErrorLogger
-		InfoLogger
+		WarnLogger
 		DebugLogger
 	}
 	UserInfo *UserInfo
@@ -578,7 +577,7 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 
 	keyStr := key.String()
 	ctx := combineContext(s3io.Ctx, req.Context())
-	F(s3io.Log.Info, "Audit: User %s downloaded file \"%s\"", s3io.UserInfo.String(), keyStr)
+	F(s3io.Log.Warn, "Audit: User %s downloaded file \"%s\"", s3io.UserInfo.String(), keyStr)
 	F(s3io.Log.Debug, "GetObject(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, keyStr)
 	sse := s3io.ServerSideEncryption
 	goo, err := s3.GetObjectWithContext(
@@ -621,7 +620,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		Size:         0,
 		LastModified: s3io.Now(),
 	}
-	F(s3io.Log.Info, "Audit: User %s uploaded file \"%s\"", s3io.UserInfo.String(), key)
+	F(s3io.Log.Warn, "Audit: User %s uploaded file \"%s\"", s3io.UserInfo.String(), key)
 	F(s3io.Log.Debug, "S3PutObjectWriter.New(key=%s)", key)
 	oow := &S3PutObjectWriter{
 		Ctx:                  combineContext(s3io.Ctx, req.Context()),
@@ -659,7 +658,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		destStr := dest.String()
 		copySource := s3io.Bucket.Bucket + "/" + srcStr
 		sse := s3io.ServerSideEncryption
-		F(s3io.Log.Info, "Audit: User %s renamed \"%s\" to \"%s\"", s3io.UserInfo.String(), srcStr, destStr)
+		F(s3io.Log.Warn, "Audit: User %s renamed \"%s\" to \"%s\"", s3io.UserInfo.String(), srcStr, destStr)
 		F(s3io.Log.Debug, "CopyObject(Bucket=%s, Key=%s, CopySource=%s, Sse=%v)", s3io.Bucket.Bucket, destStr, copySource, sse.Type)
 		_, err = s3io.Bucket.S3(sess).CopyObjectWithContext(
 			combineContext(s3io.Ctx, req.Context()),
@@ -704,7 +703,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			return err
 		}
 		keyStr := key.String()
-		F(s3io.Log.Info, "Audit: User %s deleted file \"%s\"", s3io.UserInfo.String(), key)
+		F(s3io.Log.Warn, "Audit: User %s deleted file \"%s\"", s3io.UserInfo.String(), key)
 		F(s3io.Log.Debug, "DeleteObject(Bucket=%s, Key=%s)", s3io.Bucket.Bucket, key)
 		_, err = s3io.Bucket.S3(sess).DeleteObjectWithContext(
 			combineContext(s3io.Ctx, req.Context()),
@@ -731,7 +730,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 		if !s3io.Perms.Readable && !s3io.Perms.Listable {
 			return nil, fmt.Errorf("stat operation not allowed as per configuration")
 		}
-		F(s3io.Log.Info, "Audit: User %s read path stats \"%s\"", s3io.UserInfo.String(), req.Filepath)
+		F(s3io.Log.Warn, "Audit: User %s read path stats \"%s\"", s3io.UserInfo.String(), req.Filepath)
 		key := buildKey(s3io.Bucket, req.Filepath)
 		return &S3ObjectStat{
 			DebugLogger:      s3io.Log,
@@ -746,7 +745,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 		if !s3io.Perms.Listable {
 			return nil, fmt.Errorf("listing operation not allowed as per configuration")
 		}
-		F(s3io.Log.Info, "Audit: User %s listed path \"%s\"", s3io.UserInfo.String(), req.Filepath)
+		F(s3io.Log.Warn, "Audit: User %s listed path \"%s\"", s3io.UserInfo.String(), req.Filepath)
 		return &S3ObjectLister{
 			DebugLogger:      s3io.Log,
 			Ctx:              combineContext(s3io.Ctx, req.Context()),

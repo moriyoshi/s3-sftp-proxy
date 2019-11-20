@@ -22,6 +22,7 @@ type Server struct {
 	Log                      interface {
 		DebugLogger
 		InfoLogger
+		WarnLogger
 		ErrorLogger
 	}
 	Now func() time.Time

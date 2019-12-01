@@ -194,9 +194,10 @@ func (oow *S3PutObjectWriter) Close() error {
 	if err != nil {
 		oow.Log.Debug("=> ", err)
 		F(oow.Log.Error, "failed to put object: %s", err.Error())
-	} else {
-		oow.Log.Debug("=> OK")
+		return err
 	}
+
+	oow.Log.Debug("=> OK")
 	return nil
 }
 
@@ -211,6 +212,7 @@ func (oow *S3PutObjectWriter) WriteAt(buf []byte, off int64) (int, error) {
 	F(oow.Log.Debug, "len(buf)=%d, off=%d", len(buf), off)
 	n, err := oow.writer.WriteAt(buf, off)
 	oow.Info.SetSize(oow.writer.Size())
+
 	return n, err
 }
 

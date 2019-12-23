@@ -194,9 +194,9 @@ func (oow *S3PutObjectWriter) Close() error {
 	if err != nil {
 		oow.Log.Debug("=> ", err)
 		F(oow.Log.Error, "failed to put object: %s", err.Error())
-	} else {
-		oow.Log.Debug("=> OK")
+		return err
 	}
+	oow.Log.Debug("=> OK")
 	return nil
 }
 
@@ -549,14 +549,6 @@ type S3BucketIO struct {
 
 func buildKey(s3b *S3Bucket, path string) Path {
 	return s3b.KeyPrefix.Join(SplitIntoPath(path))
-}
-
-func buildPath(s3b *S3Bucket, key string) (string, bool) {
-	_key := SplitIntoPath(key)
-	if !_key.IsPrefixed(s3b.KeyPrefix) {
-		return "", false
-	}
-	return "/" + _key[len(s3b.KeyPrefix):].String(), true
 }
 
 func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {

@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/BurntSushi/toml"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/url"
+
+	"github.com/BurntSushi/toml"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -41,7 +42,7 @@ type S3BucketConfig struct {
 	BucketUrl                      *URL                     `toml:"bucket_url"`
 	Auth                           string                   `toml:"auth"`
 	MaxObjectSize                  *int64                   `toml:"max_object_size"`
-	Readable                       *bool                    `toml:"readble"`
+	Readable                       *bool                    `toml:"readable"`
 	Writable                       *bool                    `toml:"writable"`
 	Listable                       *bool                    `toml:"listable"`
 	ServerSideEncryption           ServerSideEncryptionType `toml:"server_side_encryption"`

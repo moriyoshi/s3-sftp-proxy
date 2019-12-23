@@ -22,6 +22,7 @@ type Server struct {
 	Log                      interface {
 		DebugLogger
 		InfoLogger
+		WarnLogger
 		ErrorLogger
 	}
 	Now func() time.Time
@@ -36,7 +37,7 @@ func asHandlers(handlers interface {
 	return sftp.Handlers{handlers, handlers, handlers, handlers}
 }
 
-func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request) {
+func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request, userInfo *UserInfo) {
 	defer s.Log.Debug("HandleChannel ended")
 	server := sftp.NewRequestServer(
 		sshCh,
@@ -52,6 +53,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				Perms:                    bucket.Perms,
 				ServerSideEncryption:     &bucket.ServerSideEncryption,
 				Now:                      s.Now,
+				UserInfo:                 userInfo,
 			},
 		),
 	)
@@ -106,6 +108,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 		F(s.Log.Info, "connection from client %s closed", conn.RemoteAddr().String())
 		conn.Close()
 	}()
+
 	F(s.Log.Info, "connected from client %s", conn.RemoteAddr().String())
 
 	innerCtx, cancel := context.WithCancel(ctx)
@@ -120,6 +123,11 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, s.ServerConfig)
 	if err != nil {
 		return err
+	}
+
+	userInfo := &UserInfo{
+		Addr: conn.RemoteAddr(),
+		User: sconn.User(),
 	}
 
 	F(s.Log.Info, "user %s logged in", sconn.User())
@@ -160,7 +168,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				s.HandleChannel(innerCtx, bucket, sshCh, reqs)
+				s.HandleChannel(innerCtx, bucket, sshCh, reqs, userInfo)
 			}()
 		}
 	}(chans)

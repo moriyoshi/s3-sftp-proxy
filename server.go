@@ -105,6 +105,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	defer s.Log.Debug("HandleClient ended")
 	defer func() {
+		mUsersConnected.Dec()
 		F(s.Log.Info, "connection from client %s closed", conn.RemoteAddr().String())
 		conn.Close()
 	}()
@@ -131,6 +132,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	}
 
 	F(s.Log.Info, "user %s logged in", sconn.User())
+	mUsersConnected.Inc()
 	bucket, ok := s.UserToBucketMap[sconn.User()]
 	if !ok {
 		return fmt.Errorf("unknown error: no bucket designated to user %s found", sconn.User())

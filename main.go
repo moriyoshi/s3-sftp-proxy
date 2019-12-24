@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -156,6 +158,24 @@ func main() {
 	}
 	defer lsnr.Close()
 	logger.Info("Listen on ", _bind)
+
+	metricsBind := cfg.MetricsBind
+	if metricsBind == "" {
+		metricsBind = ":2112"
+	}
+
+	metricsEndpoint := cfg.MetricsEndpoint
+	if metricsEndpoint == "" {
+		metricsEndpoint = "/metrics"
+	}
+
+	http.Handle(metricsEndpoint, promhttp.Handler())
+
+	go func() {
+	    http.ListenAndServe(metricsBind, nil)
+	}()
+
+    logger.Info("Metrics listen on ", metricsBind, metricsEndpoint)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

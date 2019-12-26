@@ -70,6 +70,7 @@ type S3SFTPProxyConfig struct {
 	ReaderLookbackBufferSize *int                       `toml:"reader_lookback_buffer_size"`
 	ReaderMinChunkSize       *int                       `toml:"reader_min_chunk_size"`
 	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
+	PartitionSize            *int                       `toml:"partition_size"`
 	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
 	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
 	MetricsBind              string                     `toml:"metrics_bind"`

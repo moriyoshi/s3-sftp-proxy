@@ -10,11 +10,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -172,10 +171,10 @@ func main() {
 	http.Handle(metricsEndpoint, promhttp.Handler())
 
 	go func() {
-	    http.ListenAndServe(metricsBind, nil)
+		http.ListenAndServe(metricsBind, nil)
 	}()
 
-    logger.Info("Metrics listen on ", metricsBind, metricsEndpoint)
+	logger.Info("Metrics listen on ", metricsBind, metricsEndpoint)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -185,16 +184,15 @@ func main() {
 
 	errChan := make(chan error)
 	go func() {
-		errChan <- (&Server{
-			S3Buckets:                buckets,
-			ServerConfig:             sCfg,
-			Log:                      logger,
-			ReaderLookbackBufferSize: *cfg.ReaderLookbackBufferSize,
-			ReaderMinChunkSize:       *cfg.ReaderMinChunkSize,
-			ListerLookbackBufferSize: *cfg.ListerLookbackBufferSize,
-			PhantomObjectMap:         NewPhantomObjectMap(),
-			Now:                      time.Now,
-		}).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
+		errChan <- NewServer(
+			buckets,
+			sCfg,
+			logger,
+			*cfg.ReaderLookbackBufferSize,
+			*cfg.ReaderMinChunkSize,
+			*cfg.ListerLookbackBufferSize,
+			*cfg.PartitionSize,
+		).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
 	}()
 
 outer:

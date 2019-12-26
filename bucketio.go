@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -147,72 +146,9 @@ func (oor *S3GetObjectOutputReader) ReadAt(buf []byte, off int64) (int, error) {
 			}
 			copy(buf[i:], oor.spooled[s:be])
 			return be - s, nil
-		} else {
-			return 0, io.EOF
 		}
+		return 0, io.EOF
 	}
-}
-
-type S3PutObjectWriter struct {
-	Ctx                  context.Context
-	Bucket               string
-	Key                  Path
-	S3                   *aws_s3.S3
-	ServerSideEncryption *ServerSideEncryptionConfig
-	Log                  interface {
-		DebugLogger
-		ErrorLogger
-	}
-	MaxObjectSize    int64
-	Info             *PhantomObjectInfo
-	PhantomObjectMap *PhantomObjectMap
-	mtx              sync.Mutex
-	writer           *BytesWriter
-}
-
-func (oow *S3PutObjectWriter) Close() error {
-	F(oow.Log.Debug, "S3PutObjectWriter.Close")
-	oow.mtx.Lock()
-	defer oow.mtx.Unlock()
-	phInfo := oow.Info.GetOne()
-	oow.PhantomObjectMap.RemoveByInfoPtr(oow.Info)
-	key := phInfo.Key.String()
-	sse := oow.ServerSideEncryption
-	F(oow.Log.Debug, "PutObject(Bucket=%s, Key=%s, Sse=%v)", oow.Bucket, key, sse)
-	_, err := oow.S3.PutObject(
-		&aws_s3.PutObjectInput{
-			ACL:                  &aclPrivate,
-			Body:                 bytes.NewReader(oow.writer.Bytes()),
-			Bucket:               &oow.Bucket,
-			Key:                  &key,
-			ServerSideEncryption: sseTypes[sse.Type],
-			SSECustomerAlgorithm: nilIfEmpty(sse.CustomerAlgorithm()),
-			SSECustomerKey:       nilIfEmpty(sse.CustomerKey),
-			SSECustomerKeyMD5:    nilIfEmpty(sse.CustomerKeyMD5),
-			SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyId),
-		},
-	)
-	if err != nil {
-		oow.Log.Debug("=> ", err)
-		F(oow.Log.Error, "failed to put object: %s", err.Error())
-		return err
-	}
-	oow.Log.Debug("=> OK")
-	return nil
-}
-
-func (oow *S3PutObjectWriter) WriteAt(buf []byte, off int64) (int, error) {
-	oow.mtx.Lock()
-	defer oow.mtx.Unlock()
-	if oow.MaxObjectSize >= 0 {
-		if int64(len(buf))+off > oow.MaxObjectSize {
-			return 0, fmt.Errorf("file too large: maximum allowed size is %d bytes", oow.MaxObjectSize)
-		}
-	}
-	F(oow.Log.Debug, "len(buf)=%d, off=%d", len(buf), off)
-	n, err := oow.writer.WriteAt(buf, off)
-	oow.Info.SetSize(oow.writer.Size())
-	return n, err
 }
 
 type ObjectFileInfo struct {
@@ -548,6 +484,7 @@ type S3BucketIO struct {
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
+	PartitionPool            *PartitionPool
 	PhantomObjectMap         *PhantomObjectMap
 	Perms                    Perms
 	ServerSideEncryption     *ServerSideEncryptionConfig
@@ -582,7 +519,8 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 
 	phInfo := s3io.PhantomObjectMap.Get(key)
 	if phInfo != nil {
-		return bytes.NewReader(phInfo.Opaque.(*S3PutObjectWriter).writer.Bytes()), nil
+		mOperationStatus.With(lFailure).Inc()
+		return nil, fmt.Errorf("trying to download an uploading file")
 	}
 
 	keyStr := key.String()
@@ -616,7 +554,6 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 }
 
 func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
-	lSuccess := prometheus.Labels{"method": req.Method, "status": "success"}
 	lFailure := prometheus.Labels{"method": req.Method, "status": "failure"}
 	if !s3io.Perms.Writable {
 		mOperationStatus.With(lFailure).Inc()
@@ -639,8 +576,8 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		LastModified: s3io.Now(),
 	}
 	F(s3io.Log.Warn, "Audit: User %s uploaded file \"%s\"", s3io.UserInfo.String(), key)
-	F(s3io.Log.Debug, "S3PutObjectWriter.New(key=%s)", key)
-	oow := &S3PutObjectWriter{
+	F(s3io.Log.Debug, "S3MultipartUploadWriter.New(key=%s)", key)
+	oow := &S3MultipartUploadWriter{
 		Ctx:                  combineContext(s3io.Ctx, req.Context()),
 		Bucket:               s3io.Bucket.Bucket,
 		Key:                  key,
@@ -648,13 +585,12 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		ServerSideEncryption: s3io.ServerSideEncryption,
 		Log:                  s3io.Log,
 		MaxObjectSize:        maxObjectSize,
+		PartitionPool:        s3io.PartitionPool,
 		PhantomObjectMap:     s3io.PhantomObjectMap,
 		Info:                 info,
-		writer:               NewBytesWriter(),
+		RequestMethod:        req.Method,
 	}
-	info.Opaque = oow
 	s3io.PhantomObjectMap.Add(info)
-	mOperationStatus.With(lSuccess).Inc()
 	return oow, nil
 }
 

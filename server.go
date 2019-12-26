@@ -12,20 +12,38 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+type ServerLogger interface {
+	DebugLogger
+	InfoLogger
+	WarnLogger
+	ErrorLogger
+}
+
 type Server struct {
 	*ssh.ServerConfig
 	*S3Buckets
 	*PhantomObjectMap
+	*PartitionPool
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
-	Log                      interface {
-		DebugLogger
-		InfoLogger
-		WarnLogger
-		ErrorLogger
+	Log                      ServerLogger
+	Now                      func() time.Time
+}
+
+// NewServer creates a new sftp server
+func NewServer(buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int) *Server {
+	return &Server{
+		S3Buckets:                buckets,
+		ServerConfig:             serverConfig,
+		Log:                      logger,
+		ReaderLookbackBufferSize: readerLookbackBufferSize,
+		ReaderMinChunkSize:       readerMinChunkSize,
+		ListerLookbackBufferSize: listerLookbackBufferSize,
+		PartitionPool:            NewPartitionPool(partSize),
+		PhantomObjectMap:         NewPhantomObjectMap(),
+		Now:                      time.Now,
 	}
-	Now func() time.Time
 }
 
 func asHandlers(handlers interface {
@@ -48,6 +66,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				ReaderLookbackBufferSize: s.ReaderLookbackBufferSize,
 				ReaderMinChunkSize:       s.ReaderMinChunkSize,
 				ListerLookbackBufferSize: s.ListerLookbackBufferSize,
+				PartitionPool:            s.PartitionPool,
 				Log:                      s.Log,
 				PhantomObjectMap:         s.PhantomObjectMap,
 				Perms:                    bucket.Perms,
@@ -226,7 +245,7 @@ outer:
 	}
 
 	// drain
-	for _ = range connChan {
+	for range connChan {
 	}
 
 	wg.Wait()

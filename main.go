@@ -192,6 +192,7 @@ func main() {
 			*cfg.ReaderMinChunkSize,
 			*cfg.ListerLookbackBufferSize,
 			*cfg.PartitionSize,
+			*cfg.PoolSize,
 		).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
 	}()
 

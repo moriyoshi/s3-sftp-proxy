@@ -13,6 +13,8 @@ var (
 	minReaderLookbackBufferSize = 1048576
 	minReaderMinChunkSize       = 262144
 	minListerLookbackBufferSize = 100
+	defaultPartitionSize        = 5 * 1024 * 1024
+	defaultPoolSize             = 10
 	vTrue                       = true
 )
 
@@ -71,6 +73,7 @@ type S3SFTPProxyConfig struct {
 	ReaderMinChunkSize       *int                       `toml:"reader_min_chunk_size"`
 	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
 	PartitionSize            *int                       `toml:"partition_size"`
+	PoolSize                 *int                       `toml:"pool_size"`
 	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
 	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
 	MetricsBind              string                     `toml:"metrics_bind"`
@@ -181,6 +184,14 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 		cfg.ListerLookbackBufferSize = &minListerLookbackBufferSize
 	} else if *cfg.ListerLookbackBufferSize < minListerLookbackBufferSize {
 		return nil, fmt.Errorf("lister_lookback_buffer_size must be equal to or greater than %d", minListerLookbackBufferSize)
+	}
+
+	if cfg.PartitionSize == nil {
+		cfg.PartitionSize = &defaultPartitionSize
+	}
+
+	if cfg.PoolSize == nil {
+		cfg.PoolSize = &defaultPoolSize
 	}
 
 	for name, bCfg := range cfg.Buckets {

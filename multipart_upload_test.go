@@ -16,6 +16,8 @@ import (
 type mockedS3 struct {
 	s3iface.S3API
 
+	totalBytes int
+
 	errorUploadPartCalls              int
 	errorPutObjectCalls               int
 	errorCreateMultipartUploadCalls   int
@@ -48,6 +50,7 @@ func (m *mockedS3) PutObjectWithContext(ctx aws.Context, input *aws_s3.PutObject
 			return nil, fmt.Errorf("Found incorrect char at pos %d -> %c != %c", i, b[i], byte(i%10+49))
 		}
 	}
+	m.totalBytes += len(b)
 	return nil, nil
 }
 
@@ -79,6 +82,7 @@ func (m *mockedS3) UploadPartWithContext(_ aws.Context, input *aws_s3.UploadPart
 			return nil, fmt.Errorf("Found incorrect char at part %d, pos %d -> %c != %c", *input.PartNumber, i, b[i], byte((off+i)%10+49))
 		}
 	}
+	m.totalBytes += len(b)
 	etag := fmt.Sprintf("etagTest%d", *input.PartNumber-1)
 	return &aws_s3.UploadPartOutput{
 		ETag: &etag,
@@ -119,6 +123,7 @@ func (f FakeLog) Info(args ...interface{})  {}
 func (f FakeLog) Warn(args ...interface{})  {}
 func (f FakeLog) Error(args ...interface{}) {}
 
+// Tests
 func TestMultipartUploadSinglePart(t *testing.T) {
 	partSize := 50
 	log := &FakeLog{}
@@ -129,7 +134,7 @@ func TestMultipartUploadSinglePart(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize),
+		PartitionPool:        NewPartitionPool(partSize, 1),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -148,6 +153,75 @@ func TestMultipartUploadSinglePart(t *testing.T) {
 	assert.Equal(t, 0, m.createMultipartUploadCalls)
 	assert.Equal(t, 0, m.completeMultipartUploadCalls)
 	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 11, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadPendingPartOnSinglePut(t *testing.T) {
+	partSize := 20
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 7)
+	assert.NoError(t, err)
+	assert.Error(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 0, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadErrorPutObject(t *testing.T) {
+	partSize := 20
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:            partSize,
+		errorPutObjectCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 0)
+	assert.NoError(t, err)
+	assert.Error(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 1, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 0, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
 func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
@@ -160,7 +234,7 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize),
+		PartitionPool:        NewPartitionPool(partSize, 1),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -179,6 +253,8 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 	assert.Equal(t, 1, m.createMultipartUploadCalls)
 	assert.Equal(t, 1, m.completeMultipartUploadCalls)
 	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 10, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
 func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
@@ -191,7 +267,7 @@ func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize),
+		PartitionPool:        NewPartitionPool(partSize, 1),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -210,4 +286,292 @@ func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 	assert.Equal(t, 1, m.createMultipartUploadCalls)
 	assert.Equal(t, 1, m.completeMultipartUploadCalls)
 	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 26, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadMultiplePartMultipleWriteAt(t *testing.T) {
+	partSize := 15
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	for c := 0; c < 2; c++ {
+		_, err := u.WriteAt([]byte("0123456789"), 10*int64(c))
+		assert.NoError(t, err)
+	}
+	assert.NoError(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 2, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 1, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadMultiplePartIgnoredOverlapping(t *testing.T) {
+	partSize := 15
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	for c := 0; c < 2; c++ {
+		_, err := u.WriteAt([]byte("0123456789"), 0)
+		assert.NoError(t, err)
+	}
+	assert.NoError(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 1, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 0, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 10, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadMaxObjectSizeErrorSingleWrite(t *testing.T) {
+	partSize := 15
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        3,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 0)
+	assert.Error(t, err)
+	assert.Equal(t, u.Close(), err)
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 0, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
+	partSize := 7
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        12,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 0)
+	assert.NoError(t, err)
+	_, err = u.WriteAt([]byte("0123456789"), 10)
+	assert.Error(t, err)
+	assert.Equal(t, u.Close(), err)
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 1, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 1, m.abortMultipartUploadCalls)
+	assert.Equal(t, 7, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+// TODO enganchado
+func TestMultipartUploadPoolEmptyOnPendingParts(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 7)
+	assert.NoError(t, err)
+	assert.Error(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 1, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 1, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadErrorCreatingMultipartUpload(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:                        partSize,
+		errorCreateMultipartUploadCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 7)
+	assert.Error(t, err)
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadErrorUploadingPartDetectedOnNextWrite(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:             partSize,
+		errorUploadPartCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("012345678901234"), 0)
+	assert.NoError(t, err)
+	close(ch)
+	w.WaitForCompletion()
+	_, err = u.WriteAt([]byte("01"), 14)
+	assert.Error(t, err)
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 1, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 1, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadPartPending(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:             partSize,
+		errorUploadPartCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(partSize, 1),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("012345678901"), 0)
+	assert.NoError(t, err)
+	_, err = u.WriteAt([]byte("01"), 16)
+	assert.NoError(t, err)
+	assert.Error(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 1, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 1, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+// Helpers
+func assertPartsWithState(t *testing.T, u *S3MultipartUploadWriter, expected int, state S3PartUploadState) {
+	res := 0
+	for _, part := range u.parts {
+		if part.state == state {
+			res++
+		}
+	}
+	assert.Equal(t, expected, res, "Found %d parts with state %d, and expected %d", res, state, expected)
 }

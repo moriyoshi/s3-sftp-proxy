@@ -15,6 +15,7 @@ var (
 	minListerLookbackBufferSize = 100
 	defaultPartitionSize        = 5 * 1024 * 1024
 	defaultPoolSize             = 10
+	defaultPoolTimeoutSeconds   = 5
 	vTrue                       = true
 )
 
@@ -74,6 +75,7 @@ type S3SFTPProxyConfig struct {
 	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
 	PartitionSize            *int                       `toml:"partition_size"`
 	PoolSize                 *int                       `toml:"pool_size"`
+	PoolTimeoutSeconds       *int                       `toml:"pool_timeout_seconds"`
 	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
 	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
 	MetricsBind              string                     `toml:"metrics_bind"`
@@ -192,6 +194,10 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 
 	if cfg.PoolSize == nil {
 		cfg.PoolSize = &defaultPoolSize
+	}
+
+	if cfg.PoolTimeoutSeconds == nil {
+		cfg.PoolTimeoutSeconds = &defaultPoolTimeoutSeconds
 	}
 
 	for name, bCfg := range cfg.Buckets {

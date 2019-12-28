@@ -200,8 +200,19 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		u.mtx.Lock()
 		part := u.parts[partNumber]
 		if part == nil {
+			buf, err := u.PartitionPool.Get()
+			if err != nil {
+				u.mtx.Lock()
+				u.s3AbortMultipartUpload()
+				u.closePartsInStateAdding(len(u.parts) - 1)
+				mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
+				u.err = err
+				u.mtx.Unlock()
+				return 0, err
+			}
+
 			part = &S3PartToUpload{
-				content:    u.PartitionPool.Get(),
+				content:    buf,
 				o:          util.NewOffsetRanges(partSize),
 				uw:         u,
 				state:      S3PartUploadStateAdding,

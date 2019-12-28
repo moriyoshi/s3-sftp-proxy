@@ -32,7 +32,7 @@ type Server struct {
 }
 
 // NewServer creates a new sftp server
-func NewServer(buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, poolSize int) *Server {
+func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, poolSize int, poolTimeoutSeconds int) *Server {
 	return &Server{
 		S3Buckets:                buckets,
 		ServerConfig:             serverConfig,
@@ -40,7 +40,7 @@ func NewServer(buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger Server
 		ReaderLookbackBufferSize: readerLookbackBufferSize,
 		ReaderMinChunkSize:       readerMinChunkSize,
 		ListerLookbackBufferSize: listerLookbackBufferSize,
-		PartitionPool:            NewPartitionPool(partSize, poolSize),
+		PartitionPool:            NewPartitionPool(ctx, partSize, poolSize, time.Duration(poolTimeoutSeconds)*time.Second),
 		PhantomObjectMap:         NewPhantomObjectMap(),
 		Now:                      time.Now,
 	}

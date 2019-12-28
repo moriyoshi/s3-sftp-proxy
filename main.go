@@ -185,6 +185,7 @@ func main() {
 	errChan := make(chan error)
 	go func() {
 		errChan <- NewServer(
+			ctx,
 			buckets,
 			sCfg,
 			logger,
@@ -193,6 +194,7 @@ func main() {
 			*cfg.ListerLookbackBufferSize,
 			*cfg.PartitionSize,
 			*cfg.PoolSize,
+			*cfg.PoolTimeoutSeconds,
 		).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
 	}()
 

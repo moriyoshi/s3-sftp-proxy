@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -134,7 +135,7 @@ func TestMultipartUploadSinglePart(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -167,7 +168,7 @@ func TestMultipartUploadPendingPartOnSinglePut(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -201,7 +202,7 @@ func TestMultipartUploadErrorPutObject(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -234,7 +235,7 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -267,7 +268,7 @@ func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -300,7 +301,7 @@ func TestMultipartUploadMultiplePartMultipleWriteAt(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -334,7 +335,7 @@ func TestMultipartUploadMultiplePartIgnoredOverlapping(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -369,7 +370,7 @@ func TestMultipartUploadMaxObjectSizeErrorSingleWrite(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -402,7 +403,7 @@ func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -427,7 +428,6 @@ func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
-// TODO enganchado
 func TestMultipartUploadPoolEmptyOnPendingParts(t *testing.T) {
 	partSize := 10
 	log := &FakeLog{}
@@ -438,7 +438,7 @@ func TestMultipartUploadPoolEmptyOnPendingParts(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -472,7 +472,7 @@ func TestMultipartUploadErrorCreatingMultipartUpload(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -505,7 +505,7 @@ func TestMultipartUploadErrorUploadingPartDetectedOnNextWrite(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),
@@ -540,7 +540,7 @@ func TestMultipartUploadPartPending(t *testing.T) {
 	}
 	u := &S3MultipartUploadWriter{
 		S3:                   m,
-		PartitionPool:        NewPartitionPool(partSize, 1),
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
 		Log:                  log,
 		PhantomObjectMap:     NewPhantomObjectMap(),

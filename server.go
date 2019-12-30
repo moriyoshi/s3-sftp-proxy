@@ -12,20 +12,40 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+type ServerLogger interface {
+	DebugLogger
+	InfoLogger
+	WarnLogger
+	ErrorLogger
+}
+
 type Server struct {
 	*ssh.ServerConfig
 	*S3Buckets
 	*PhantomObjectMap
+	UploadMemoryBufferPool   *MemoryBufferPool
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
-	Log                      interface {
-		DebugLogger
-		InfoLogger
-		WarnLogger
-		ErrorLogger
+	Log                      ServerLogger
+	Now                      func() time.Time
+	UploadChan               chan<- *S3PartToUpload
+}
+
+// NewServer creates a new sftp server
+func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, uploadMemoryBufferPoolSize int, uploadMemoryBufferPoolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
+	return &Server{
+		S3Buckets:                buckets,
+		ServerConfig:             serverConfig,
+		Log:                      logger,
+		ReaderLookbackBufferSize: readerLookbackBufferSize,
+		ReaderMinChunkSize:       readerMinChunkSize,
+		ListerLookbackBufferSize: listerLookbackBufferSize,
+		UploadMemoryBufferPool:   NewMemoryBufferPool(ctx, partSize, uploadMemoryBufferPoolSize, uploadMemoryBufferPoolTimeout),
+		PhantomObjectMap:         NewPhantomObjectMap(),
+		Now:                      time.Now,
+		UploadChan:               uploadChan,
 	}
-	Now func() time.Time
 }
 
 func asHandlers(handlers interface {
@@ -48,12 +68,14 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				ReaderLookbackBufferSize: s.ReaderLookbackBufferSize,
 				ReaderMinChunkSize:       s.ReaderMinChunkSize,
 				ListerLookbackBufferSize: s.ListerLookbackBufferSize,
+				UploadMemoryBufferPool:   s.UploadMemoryBufferPool,
 				Log:                      s.Log,
 				PhantomObjectMap:         s.PhantomObjectMap,
 				Perms:                    bucket.Perms,
 				ServerSideEncryption:     &bucket.ServerSideEncryption,
 				Now:                      s.Now,
 				UserInfo:                 userInfo,
+				UploadChan:               s.UploadChan,
 			},
 		),
 	)
@@ -226,7 +248,7 @@ outer:
 	}
 
 	// drain
-	for _ = range connChan {
+	for range connChan {
 	}
 
 	wg.Wait()

@@ -1,0 +1,11 @@
+.git
+.gitignore
+.dockerignore
+.gitlab-ci.yml
+.travis.yml
+.idea
+.github/
+host_key
+host_key.pub
+s3-sftp-proxy
+s3-sftp-proxy.toml

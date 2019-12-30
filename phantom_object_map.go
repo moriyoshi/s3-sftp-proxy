@@ -9,7 +9,6 @@ type PhantomObjectInfo struct {
 	Key          Path
 	LastModified time.Time
 	Size         int64
-	Opaque       interface{}
 	Mtx          sync.Mutex
 }
 
@@ -31,10 +30,12 @@ func (info *PhantomObjectInfo) SetLastModified(v time.Time) {
 	info.LastModified = v
 }
 
-func (info *PhantomObjectInfo) SetSize(v int64) {
+func (info *PhantomObjectInfo) SetSizeIfGreater(v int64) {
 	info.Mtx.Lock()
 	defer info.Mtx.Unlock()
-	info.Size = v
+	if v > info.Size {
+		info.Size = v
+	}
 }
 
 type phantomObjectInfoMap map[string]*PhantomObjectInfo

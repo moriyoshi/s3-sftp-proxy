@@ -177,10 +177,17 @@ func main() {
 	logger.Info("Metrics listen on ", metricsBind, metricsEndpoint)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	sigChan := make(chan os.Signal)
 	signal.Notify(sigChan, os.Interrupt)
+
+	uploadWorkers := NewS3UploadWorkers(ctx, *cfg.UploadWorkersCount, logger)
+	uploadChan := uploadWorkers.Start()
+
+	defer func() {
+		cancel()
+		uploadWorkers.WaitForCompletion()
+	}()
 
 	errChan := make(chan error)
 	go func() {
@@ -194,7 +201,8 @@ func main() {
 			*cfg.ListerLookbackBufferSize,
 			*cfg.PartitionSize,
 			*cfg.PoolSize,
-			*cfg.PoolTimeoutSeconds,
+			(*cfg.PoolTimeout).Duration,
+			uploadChan,
 		).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
 	}()
 

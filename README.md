@@ -117,7 +117,7 @@ aws_secret_access_key = "bbb"
 	Specifies s3 endpoint (server) different from AWS.
 
 * `s3_force_path_style` (optional)
-    This option should be set to `true` if ypu use endpount different from AWS.
+    This option should be set to `true` if you use endpoint different from AWS.
 
 	Set this to `true` to force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`).
 

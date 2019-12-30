@@ -3,12 +3,9 @@ FROM golang:alpine AS build
 ENV GO111MODULE=on
 
 SHELL ["/bin/sh", "-x", "-c"]
-
-COPY ./ /go/src/s3-sftp-proxy/
-
+COPY . /go/src/s3-sftp-proxy/
 WORKDIR /go/src/s3-sftp-proxy/
-
-RUN go build
+RUN go build -ldflags "-s -w"
 
 
 FROM alpine:3.10

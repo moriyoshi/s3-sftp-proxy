@@ -134,6 +134,7 @@ func TestMultipartUploadSinglePart(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -167,6 +168,7 @@ func TestMultipartUploadPendingPartOnSinglePut(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -201,6 +203,7 @@ func TestMultipartUploadErrorPutObject(t *testing.T) {
 		errorPutObjectCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -234,6 +237,7 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -258,6 +262,80 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
+func TestMultipartUploadFillingPart(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 10, 5*time.Second),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("01234"), 0)
+	assert.NoError(t, err)
+	_, err = u.WriteAt([]byte("56789"), 5)
+	assert.NoError(t, err)
+	_, err = u.WriteAt([]byte("0123456789"), 10)
+	assert.NoError(t, err)
+	assert.NoError(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 2, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 1, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 20, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadMultiPartNotLockings(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize: partSize,
+	}
+	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 10, 5*time.Second),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789"), 0)
+	assert.NoError(t, err)
+	_, err = u.WriteAt([]byte("0123456789"), 0)
+	assert.NoError(t, err)
+	assert.NoError(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 1, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 1, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 10, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
 func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 	partSize := 15
 	log := &FakeLog{}
@@ -267,6 +345,7 @@ func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -300,6 +379,7 @@ func TestMultipartUploadMultiplePartMultipleWriteAt(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -334,6 +414,7 @@ func TestMultipartUploadMultiplePartIgnoredOverlapping(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -369,6 +450,7 @@ func TestMultipartUploadMaxObjectSizeErrorSingleWrite(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -402,6 +484,7 @@ func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
 		RequestMethod:        "read",
@@ -428,7 +511,7 @@ func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
-func TestMultipartUploadPoolEmptyOnPendingParts(t *testing.T) {
+func TestMultipartUploadPendingParts(t *testing.T) {
 	partSize := 10
 	log := &FakeLog{}
 	w := NewS3UploadWorkers(context.Background(), 1, log)
@@ -437,6 +520,7 @@ func TestMultipartUploadPoolEmptyOnPendingParts(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
@@ -461,7 +545,7 @@ func TestMultipartUploadPoolEmptyOnPendingParts(t *testing.T) {
 	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
-func TestMultipartUploadErrorCreatingMultipartUpload(t *testing.T) {
+func TestMultipartUploadErrorCreatingMultipartUploadOnClose(t *testing.T) {
 	partSize := 10
 	log := &FakeLog{}
 	w := NewS3UploadWorkers(context.Background(), 1, log)
@@ -471,6 +555,7 @@ func TestMultipartUploadErrorCreatingMultipartUpload(t *testing.T) {
 		errorCreateMultipartUploadCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
@@ -482,6 +567,41 @@ func TestMultipartUploadErrorCreatingMultipartUpload(t *testing.T) {
 		ServerSideEncryption: &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 7)
+	assert.NoError(t, err)
+	assert.Error(t, u.Close())
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 1, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadErrorCreatingMultipartUploadOnWrite(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:                        partSize,
+		errorCreateMultipartUploadCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("0123456789012"), 0)
 	assert.Error(t, err)
 	close(ch)
 	w.WaitForCompletion()
@@ -504,6 +624,7 @@ func TestMultipartUploadErrorUploadingPartDetectedOnNextWrite(t *testing.T) {
 		errorUploadPartCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
@@ -539,6 +660,7 @@ func TestMultipartUploadPartPending(t *testing.T) {
 		errorUploadPartCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
 		S3:                   m,
 		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
 		RequestMethod:        "read",
@@ -565,11 +687,79 @@ func TestMultipartUploadPartPending(t *testing.T) {
 	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
 }
 
+func TestMultipartUploadPoolFull(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:             partSize,
+		errorUploadPartCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 100*time.Millisecond),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("012345678901"), 7)
+	assert.Error(t, err)
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 0, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
+func TestMultipartUploadErrorasdf(t *testing.T) {
+	partSize := 10
+	log := &FakeLog{}
+	w := NewS3UploadWorkers(context.Background(), 1, log)
+	ch := w.Start()
+	m := &mockedS3{
+		partSize:             partSize,
+		errorUploadPartCalls: 1,
+	}
+	u := &S3MultipartUploadWriter{
+		Ctx:                  context.Background(),
+		S3:                   m,
+		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 100*time.Millisecond),
+		RequestMethod:        "read",
+		Log:                  log,
+		PhantomObjectMap:     NewPhantomObjectMap(),
+		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:           ch,
+		MaxObjectSize:        -1,
+		ServerSideEncryption: &ServerSideEncryptionConfig{},
+	}
+	_, err := u.WriteAt([]byte("012345678901"), 7)
+	assert.Error(t, err)
+	close(ch)
+	w.WaitForCompletion()
+	assert.Equal(t, 0, m.putObjectCalls)
+	assert.Equal(t, 0, m.uploadPartCalls)
+	assert.Equal(t, 0, m.createMultipartUploadCalls)
+	assert.Equal(t, 0, m.completeMultipartUploadCalls)
+	assert.Equal(t, 0, m.abortMultipartUploadCalls)
+	assert.Equal(t, 0, m.totalBytes)
+	assertPartsWithState(t, u, 0, S3PartUploadStateAdding)
+}
+
 // Helpers
 func assertPartsWithState(t *testing.T, u *S3MultipartUploadWriter, expected int, state S3PartUploadState) {
 	res := 0
 	for _, part := range u.parts {
-		if part.state == state {
+		if part != nil && part.state == state {
 			res++
 		}
 	}

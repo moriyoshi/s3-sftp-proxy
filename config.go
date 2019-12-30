@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
@@ -15,7 +16,8 @@ var (
 	minListerLookbackBufferSize = 100
 	defaultPartitionSize        = 5 * 1024 * 1024
 	defaultPoolSize             = 10
-	defaultPoolTimeoutSeconds   = 5
+	defaultPoolTimeout          = 5 * time.Second
+	defaultUploadWorkersCount   = 2
 	vTrue                       = true
 )
 
@@ -26,6 +28,15 @@ type URL struct {
 func (u *URL) UnmarshalText(text []byte) (err error) {
 	u.URL, err = url.Parse(string(text))
 	return
+}
+
+type duration struct {
+	time.Duration
+}
+
+func (d *duration) UnmarshalText(text []byte) (err error) {
+	d.Duration, err = time.ParseDuration(string(text))
+	return err
 }
 
 type AWSCredentialsConfig struct {
@@ -75,7 +86,8 @@ type S3SFTPProxyConfig struct {
 	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
 	PartitionSize            *int                       `toml:"partition_size"`
 	PoolSize                 *int                       `toml:"pool_size"`
-	PoolTimeoutSeconds       *int                       `toml:"pool_timeout_seconds"`
+	PoolTimeout              *duration                  `toml:"pool_timeout"`
+	UploadWorkersCount       *int                       `toml:"upload_workers_count"`
 	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
 	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
 	MetricsBind              string                     `toml:"metrics_bind"`
@@ -196,8 +208,12 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 		cfg.PoolSize = &defaultPoolSize
 	}
 
-	if cfg.PoolTimeoutSeconds == nil {
-		cfg.PoolTimeoutSeconds = &defaultPoolTimeoutSeconds
+	if cfg.PoolTimeout == nil {
+		cfg.PoolTimeout = &duration{defaultPoolTimeout}
+	}
+
+	if cfg.UploadWorkersCount == nil {
+		cfg.UploadWorkersCount = &defaultUploadWorkersCount
 	}
 
 	for name, bCfg := range cfg.Buckets {

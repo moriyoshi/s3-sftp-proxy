@@ -494,7 +494,8 @@ type S3BucketIO struct {
 		WarnLogger
 		DebugLogger
 	}
-	UserInfo *UserInfo
+	UserInfo   *UserInfo
+	UploadChan chan<- *S3PartToUpload
 }
 
 func buildKey(s3b *S3Bucket, path string) Path {
@@ -589,6 +590,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		PhantomObjectMap:     s3io.PhantomObjectMap,
 		Info:                 info,
 		RequestMethod:        req.Method,
+		UploadChan:           s3io.UploadChan,
 	}
 	s3io.PhantomObjectMap.Add(info)
 	return oow, nil

@@ -29,10 +29,11 @@ type Server struct {
 	ListerLookbackBufferSize int
 	Log                      ServerLogger
 	Now                      func() time.Time
+	UploadChan               chan<- *S3PartToUpload
 }
 
 // NewServer creates a new sftp server
-func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, poolSize int, poolTimeoutSeconds int) *Server {
+func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, poolSize int, poolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
 	return &Server{
 		S3Buckets:                buckets,
 		ServerConfig:             serverConfig,
@@ -40,9 +41,10 @@ func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.Server
 		ReaderLookbackBufferSize: readerLookbackBufferSize,
 		ReaderMinChunkSize:       readerMinChunkSize,
 		ListerLookbackBufferSize: listerLookbackBufferSize,
-		PartitionPool:            NewPartitionPool(ctx, partSize, poolSize, time.Duration(poolTimeoutSeconds)*time.Second),
+		PartitionPool:            NewPartitionPool(ctx, partSize, poolSize, poolTimeout),
 		PhantomObjectMap:         NewPhantomObjectMap(),
 		Now:                      time.Now,
+		UploadChan:               uploadChan,
 	}
 }
 
@@ -73,6 +75,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				ServerSideEncryption:     &bucket.ServerSideEncryption,
 				Now:                      s.Now,
 				UserInfo:                 userInfo,
+				UploadChan:               s.UploadChan,
 			},
 		),
 	)

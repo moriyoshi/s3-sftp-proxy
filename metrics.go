@@ -25,7 +25,17 @@ var (
 	)
 	mUsersConnected = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "sftp_users_connected",
-		Help: "The total number of users connected now",
+		Help: "The number of users connected now",
+	},
+	)
+	mMemoryPoolsMax = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "sftp_memory_pools_max",
+		Help: "The number of maximum memory pools",
+	},
+	)
+	mMemoryPoolsUsed = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "sftp_memory_pools_used",
+		Help: "The number of memory pools used",
 	},
 	)
 )

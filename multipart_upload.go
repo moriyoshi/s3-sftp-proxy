@@ -100,7 +100,7 @@ func (u *S3MultipartUploadWriter) Close() error {
 	err := u.err
 	if err == nil {
 		// Only one part -> use PutObject
-		if u.multiPartUploadID == nil {
+		if len(u.parts) == 1 && u.multiPartUploadID == nil {
 			part := u.parts[0]
 
 			var content []byte
@@ -119,21 +119,22 @@ func (u *S3MultipartUploadWriter) Close() error {
 				part.state = S3PartUploadErrorSending
 			}
 		} else {
+			// More than 1 part -> MultiPartUpload used before, we have to send latest part, wait until all parts will be uploaded and then complete the job
 			u.mtx.Unlock()
 
-			u.enqueueUpload(u.parts[len(u.parts)-1])
+			err = u.enqueueUpload(u.parts[len(u.parts)-1])
 			u.uploadGroup.Wait()
 
 			u.mtx.Lock()
-
-			// More than 1 part -> MultiPartUpload used before, we have to send latest part, wait until all parts will be uploaded and complete the job
-			pending := u.closePartsInStateAdding(len(u.parts) - 2)
-			if pending > 0 {
-				err = fmt.Errorf("Closing upload and having %d pending parts to fill", pending)
-			} else {
-				err = u.err
-				if err == nil {
-					err = u.s3CompleteMultipartUpload()
+			if err == nil {
+				pending := u.closePartsInStateAdding()
+				if pending > 0 {
+					err = fmt.Errorf("Closing upload and having %d pending parts to fill", pending)
+				} else {
+					err = u.err
+					if err == nil {
+						err = u.s3CompleteMultipartUpload()
+					}
 				}
 			}
 		}
@@ -141,7 +142,7 @@ func (u *S3MultipartUploadWriter) Close() error {
 
 	if err != nil {
 		u.s3AbortMultipartUpload()
-		u.closePartsInStateAdding(len(u.parts) - 1)
+		u.closePartsInStateAdding()
 		mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
 	} else {
 		mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "success"}).Inc()
@@ -166,31 +167,24 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		err = fmt.Errorf("file too large: maximum allowed size is %d bytes", u.MaxObjectSize)
 	}
 
-	if err == nil {
-		partNumberFinal := int((off + pending - 1) / partSize)
-
-		F(u.Log.Debug, "len(buf)=%d, off=%d, partNumberInitial=%d, partOffsetInitial=%d", len(buf), off, partNumberInitial, partOffsetInitial)
-		if u.multiPartUploadID == nil && (partNumberFinal > 0 || len(buf) == u.PartitionPool.PartSize) {
-			err = u.s3CreateMultipartUpload()
-		}
-
-		if err == nil {
-			u.Info.SetSizeIfGreater(offFinal)
-			if len(u.parts) <= partNumberFinal {
-				newParts := make([]*S3PartToUpload, partNumberFinal+1)
-				copy(newParts, u.parts)
-				u.parts = newParts
-			}
-		}
-	}
-
 	if err != nil {
+		F(u.Log.Debug, "Error on WriteAt: %s", err.Error())
 		u.s3AbortMultipartUpload()
-		u.closePartsInStateAdding(len(u.parts) - 1)
-		mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
+		u.closePartsInStateAdding()
 		u.err = err
 		u.mtx.Unlock()
+		mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
 		return 0, err
+	}
+
+	partNumberFinal := int((off + pending - 1) / partSize)
+
+	F(u.Log.Debug, "len(buf)=%d, off=%d, partNumberInitial=%d, partOffsetInitial=%d", len(buf), off, partNumberInitial, partOffsetInitial)
+	u.Info.SetSizeIfGreater(offFinal)
+	if len(u.parts) <= partNumberFinal {
+		newParts := make([]*S3PartToUpload, partNumberFinal+1)
+		copy(newParts, u.parts)
+		u.parts = newParts
 	}
 	u.mtx.Unlock()
 
@@ -200,14 +194,15 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		u.mtx.Lock()
 		part := u.parts[partNumber]
 		if part == nil {
+			F(u.Log.Debug, "Getting space from partition pool for part number: %d", partNumber)
 			buf, err := u.PartitionPool.Get()
 			if err != nil {
-				u.mtx.Lock()
+				F(u.Log.Debug, "Error getting a partition pool: %s", err.Error())
 				u.s3AbortMultipartUpload()
-				u.closePartsInStateAdding(len(u.parts) - 1)
-				mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
+				u.closePartsInStateAdding()
 				u.err = err
 				u.mtx.Unlock()
+				mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
 				return 0, err
 			}
 
@@ -229,9 +224,24 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		partCopied := partOffsetFinal - partOffset
 
 		part.mtx.Lock()
-		part.copy(buf[bufOffset:bufOffset+partCopied], partOffset, partOffsetFinal)
-		if part.isFull() {
-			u.enqueueUpload(part)
+		if part.state < S3PartUploadStateFull {
+			part.copy(buf[bufOffset:bufOffset+partCopied], partOffset, partOffsetFinal)
+			if part.isFull() {
+				err = u.enqueueUpload(part)
+				if err != nil {
+					part.mtx.Unlock()
+					u.mtx.Lock()
+					F(u.Log.Debug, "Error enqueuing a part upload: %s", err.Error())
+					u.s3AbortMultipartUpload()
+					u.closePartsInStateAdding()
+					u.err = err
+					u.mtx.Unlock()
+					mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
+					return 0, err
+				}
+			}
+		} else {
+			F(u.Log.Debug, "Trying to add more data to a part already full")
 		}
 		part.mtx.Unlock()
 		partNumber++
@@ -242,25 +252,44 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 	return len(buf), nil
 }
 
-func (u *S3MultipartUploadWriter) enqueueUpload(part *S3PartToUpload) {
-	if part.state <= S3PartUploadStateFull {
+func (u *S3MultipartUploadWriter) enqueueUpload(part *S3PartToUpload) error {
+	if part.state < S3PartUploadStateFull {
+		u.mtx.Lock()
+		if u.multiPartUploadID == nil {
+			if err := u.s3CreateMultipartUpload(); err != nil {
+				u.mtx.Unlock()
+				return err
+			}
+		}
+		u.mtx.Unlock()
+
+		F(u.Log.Debug, "Enqueuing part %d to be uploaded", part.partNumber)
 		part.state = S3PartUploadStateFull
 		u.uploadGroup.Add(1)
-		u.UploadChan <- part
+		select {
+		case <-u.Ctx.Done():
+			return fmt.Errorf("Enqueue upload cancelled")
+		case u.UploadChan <- part:
+		}
 	}
+	return nil
 }
 
-func (u *S3MultipartUploadWriter) closePartsInStateAdding(l int) int {
+func (u *S3MultipartUploadWriter) closePartsInStateAdding() int {
 	pending := 0
-	for i := l; i >= 0; i-- {
-		part := u.parts[i]
-		part.mtx.Lock()
-		if part.state == S3PartUploadStateAdding {
-			u.PartitionPool.Put(part.content)
-			part.state = S3PartUploadCancelled
-			pending++
+	if u.parts != nil {
+		for i := len(u.parts) - 1; i >= 0; i-- {
+			part := u.parts[i]
+			if part != nil {
+				part.mtx.Lock()
+				if part.state == S3PartUploadStateAdding {
+					u.PartitionPool.Put(part.content)
+					part.state = S3PartUploadCancelled
+					pending++
+				}
+				part.mtx.Unlock()
+			}
 		}
-		part.mtx.Unlock()
 	}
 	return pending
 }
@@ -288,7 +317,7 @@ func (u *S3MultipartUploadWriter) s3CreateMultipartUpload() error {
 		F(u.Log.Error, "failed to create multipart upload: %s", err.Error())
 		return err
 	}
-	u.Log.Debug("=> OK")
+	F(u.Log.Debug, "=> OK, uploadId=%s", *resp.UploadId)
 	u.multiPartUploadID = resp.UploadId
 	return nil
 }
@@ -365,7 +394,7 @@ func (u *S3MultipartUploadWriter) s3CompleteMultipartUpload() error {
 func (u *S3MultipartUploadWriter) s3UploadPart(part *S3PartToUpload) error {
 	key := u.Info.GetOne().Key.String()
 	sse := u.ServerSideEncryption
-	F(u.Log.Debug, "UploadPart(Bucket=%s, Key=%s, Sse=%v, part=%d)", u.Bucket, key, sse, part.partNumber)
+	F(u.Log.Debug, "UploadPart(Bucket=%s, Key=%s, Sse=%v, uploadId=%s, part=%d)", u.Bucket, key, sse, *u.multiPartUploadID, part.partNumber)
 
 	var content []byte
 	var err error
@@ -439,6 +468,7 @@ func (w *S3UploadWorkers) Start() chan<- *S3PartToUpload {
 		go func(wn int) {
 			defer w.wg.Done()
 
+			F(w.log.Debug, "S3 upload worker %d waiting for upload jobs", wn)
 			for {
 				select {
 				case <-w.ctx.Done():
@@ -446,9 +476,10 @@ func (w *S3UploadWorkers) Start() chan<- *S3PartToUpload {
 					return
 				case part, ok := <-uploadChan:
 					if !ok {
-						F(w.log.Debug, "S3 upload worker %d finished because channel is closed", wn)
+						F(w.log.Debug, "S3 upload worker %d => closed channel", wn)
 						return
 					}
+					F(w.log.Debug, "S3 upload worker %d => uploading part %d", wn, part.partNumber)
 					w.uploadPart(part)
 				}
 			}

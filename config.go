@@ -11,14 +11,14 @@ import (
 )
 
 var (
-	minReaderLookbackBufferSize = 1048576
-	minReaderMinChunkSize       = 262144
-	minListerLookbackBufferSize = 100
-	defaultPartitionSize        = 5 * 1024 * 1024
-	defaultPoolSize             = 10
-	defaultPoolTimeout          = 5 * time.Second
-	defaultUploadWorkersCount   = 2
-	vTrue                       = true
+	minReaderLookbackBufferSize          = 1048576
+	minReaderMinChunkSize                = 262144
+	minListerLookbackBufferSize          = 100
+	defaultUploadMemoryBufferSize        = 5 * 1024 * 1024 // 5 MB
+	defaultUploadMemoryBufferPoolSize    = 10
+	defaultUploadMemoryBufferPoolTimeout = 5 * time.Second
+	defaultUploadWorkersCount            = 2
+	vTrue                                = true
 )
 
 type URL struct {
@@ -78,20 +78,20 @@ type AuthConfig struct {
 }
 
 type S3SFTPProxyConfig struct {
-	Bind                     string                     `toml:"bind"`
-	HostKeyFile              string                     `toml:"host_key_file"`
-	Banner                   string                     `toml:"banner"`
-	ReaderLookbackBufferSize *int                       `toml:"reader_lookback_buffer_size"`
-	ReaderMinChunkSize       *int                       `toml:"reader_min_chunk_size"`
-	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
-	PartitionSize            *int                       `toml:"partition_size"`
-	PoolSize                 *int                       `toml:"pool_size"`
-	PoolTimeout              *duration                  `toml:"pool_timeout"`
-	UploadWorkersCount       *int                       `toml:"upload_workers_count"`
-	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
-	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
-	MetricsBind              string                     `toml:"metrics_bind"`
-	MetricsEndpoint          string                     `toml:"metrics_endpoint"`
+	Bind                          string                     `toml:"bind"`
+	HostKeyFile                   string                     `toml:"host_key_file"`
+	Banner                        string                     `toml:"banner"`
+	ReaderLookbackBufferSize      *int                       `toml:"reader_lookback_buffer_size"`
+	ReaderMinChunkSize            *int                       `toml:"reader_min_chunk_size"`
+	ListerLookbackBufferSize      *int                       `toml:"lister_lookback_buffer_size"`
+	UploadMemoryBufferSize        *int                       `toml:"upload_memory_buffer_size"`
+	UploadMemoryBufferPoolSize    *int                       `toml:"upload_memory_buffer_pool_size"`
+	UploadMemoryBufferPoolTimeout *duration                  `toml:"upload_memory_buffer_pool_timeout"`
+	UploadWorkersCount            *int                       `toml:"upload_workers_count"`
+	Buckets                       map[string]*S3BucketConfig `toml:"buckets"`
+	AuthConfigs                   map[string]*AuthConfig     `toml:"auth"`
+	MetricsBind                   string                     `toml:"metrics_bind"`
+	MetricsEndpoint               string                     `toml:"metrics_endpoint"`
 }
 
 func validateAndFixupBucketConfig(bCfg *S3BucketConfig) error {
@@ -200,16 +200,16 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 		return nil, fmt.Errorf("lister_lookback_buffer_size must be equal to or greater than %d", minListerLookbackBufferSize)
 	}
 
-	if cfg.PartitionSize == nil {
-		cfg.PartitionSize = &defaultPartitionSize
+	if cfg.UploadMemoryBufferSize == nil {
+		cfg.UploadMemoryBufferSize = &defaultUploadMemoryBufferSize
 	}
 
-	if cfg.PoolSize == nil {
-		cfg.PoolSize = &defaultPoolSize
+	if cfg.UploadMemoryBufferPoolSize == nil {
+		cfg.UploadMemoryBufferPoolSize = &defaultUploadMemoryBufferPoolSize
 	}
 
-	if cfg.PoolTimeout == nil {
-		cfg.PoolTimeout = &duration{defaultPoolTimeout}
+	if cfg.UploadMemoryBufferPoolTimeout == nil {
+		cfg.UploadMemoryBufferPoolTimeout = &duration{defaultUploadMemoryBufferPoolTimeout}
 	}
 
 	if cfg.UploadWorkersCount == nil {

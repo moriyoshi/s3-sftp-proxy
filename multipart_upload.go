@@ -74,18 +74,18 @@ type S3MultipartUploadWriter struct {
 		WarnLogger
 		ErrorLogger
 	}
-	MaxObjectSize     int64
-	PartitionPool     *PartitionPool
-	Info              *PhantomObjectInfo
-	PhantomObjectMap  *PhantomObjectMap
-	RequestMethod     string
-	mtx               sync.Mutex
-	completedParts    []*aws_s3.CompletedPart
-	parts             []*S3PartToUpload
-	multiPartUploadID *string
-	err               error
-	uploadGroup       sync.WaitGroup
-	UploadChan        chan<- *S3PartToUpload
+	MaxObjectSize          int64
+	UploadMemoryBufferPool *MemoryBufferPool
+	Info                   *PhantomObjectInfo
+	PhantomObjectMap       *PhantomObjectMap
+	RequestMethod          string
+	mtx                    sync.Mutex
+	completedParts         []*aws_s3.CompletedPart
+	parts                  []*S3PartToUpload
+	multiPartUploadID      *string
+	err                    error
+	uploadGroup            sync.WaitGroup
+	UploadChan             chan<- *S3PartToUpload
 }
 
 // Close closes multipart upload writer
@@ -107,7 +107,7 @@ func (u *S3MultipartUploadWriter) Close() error {
 			content, err = part.getContent()
 			if err == nil {
 				err = u.s3PutObject(content)
-				u.PartitionPool.Put(part.content)
+				u.UploadMemoryBufferPool.Put(part.content)
 
 				if err == nil {
 					part.state = S3PartUploadStateSent
@@ -115,7 +115,7 @@ func (u *S3MultipartUploadWriter) Close() error {
 					part.state = S3PartUploadErrorSending
 				}
 			} else {
-				u.PartitionPool.Put(part.content)
+				u.UploadMemoryBufferPool.Put(part.content)
 				part.state = S3PartUploadErrorSending
 			}
 		} else {
@@ -155,7 +155,7 @@ func (u *S3MultipartUploadWriter) Close() error {
 func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 	pending := int64(len(buf))
 	offFinal := off + pending
-	partSize := int64(u.PartitionPool.PartSize)
+	partSize := int64(u.UploadMemoryBufferPool.BufSize)
 	partNumberInitial := int(off / partSize)
 	partOffsetInitial := off % partSize
 	bufOffset := int64(0)
@@ -195,7 +195,7 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		part := u.parts[partNumber]
 		if part == nil {
 			F(u.Log.Debug, "Getting space from partition pool for part number: %d", partNumber)
-			buf, err := u.PartitionPool.Get()
+			buf, err := u.UploadMemoryBufferPool.Get()
 			if err != nil {
 				F(u.Log.Debug, "Error getting a partition pool: %s", err.Error())
 				u.s3AbortMultipartUpload()
@@ -283,7 +283,7 @@ func (u *S3MultipartUploadWriter) closePartsInStateAdding() int {
 			if part != nil {
 				part.mtx.Lock()
 				if part.state == S3PartUploadStateAdding {
-					u.PartitionPool.Put(part.content)
+					u.UploadMemoryBufferPool.Put(part.content)
 					part.state = S3PartUploadCancelled
 					pending++
 				}
@@ -507,7 +507,7 @@ func (w *S3UploadWorkers) uploadPart(part *S3PartToUpload) {
 	}
 
 	err := u.s3UploadPart(part)
-	u.PartitionPool.Put(part.content)
+	u.UploadMemoryBufferPool.Put(part.content)
 
 	if err != nil {
 		part.state = S3PartUploadErrorSending

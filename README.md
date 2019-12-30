@@ -92,17 +92,17 @@ metrics_endpoint = "/metrics"
 
 	Contrary to the people's expectation, SFTP also requires file listings to be retrieved in random-access as well.
 
-* `partition_size` (optional, defaults to `5242880`)
+* `upload_memory_buffer_size` (optional, defaults to `5242880`)
 
   Bytes used as internal memory buffer to upload files to S3, and to divide a file into several parts to upload to S3 (details on (Uploads section)[#uploads]).
 
-* `pool_size` (optional, defaults to `10`)
+* `upload_memory_buffer_pool_size` (optional, defaults to `10`)
 
-  Number of internal memory buffers of size `partition_size` used for upload purposes. Details on (Uploads section)[#uploads].
+  Number of internal memory buffers of size `upload_memory_buffer_size` used for upload purposes. Details on (Uploads section)[#uploads].
 
-* `pool_timeout` (optional, defaults to `"5s"`)
+* `upload_memory_buffer_pool_timeout` (optional, defaults to `"5s"`)
 
-	Maximum amount of time to wait to request a memory buffer from the pool. This timeout is useful when the pool is full. Details on (Uploads section)[#uploads].
+	Maximum amount of time to wait to wait for an available memory buffer from pool on uploads. This timeout is useful when the pool is full. Details on (Uploads section)[#uploads].
 
 * `upload_workers_count` (optional, defaults to `2`)
 
@@ -305,13 +305,17 @@ user1 = { password="test", public_keys="..." }
 
 		Number of users connected to the server in certain moment.
 
-* `sftp_memory_pool_max` _(gauge)_
+* `sftp_memory_buffer_pool_max` _(gauge)_
 
-		Number of buffers that can be requested in memory pool.
+		Number of memory buffers that can be requested in the pool.
 
-* `sftp_memory_pool_used` _(gauge)_
+* `sftp_memory_buffer_pool_used` _(gauge)_
 
-    Number of buffers in memory pool used in certain moment.
+    Number of memory buffers used current in the pool.
+
+* `sftp_memory_buffer_pool_timeouts` _(gauge)_
+
+    Number of timeouts produced in the pool when a memory buffer was requested.
 
 ## Internals
 

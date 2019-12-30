@@ -484,7 +484,7 @@ type S3BucketIO struct {
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
-	PartitionPool            *PartitionPool
+	UploadMemoryBufferPool   *MemoryBufferPool
 	PhantomObjectMap         *PhantomObjectMap
 	Perms                    Perms
 	ServerSideEncryption     *ServerSideEncryptionConfig
@@ -579,18 +579,18 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 	F(s3io.Log.Warn, "Audit: User %s uploaded file \"%s\"", s3io.UserInfo.String(), key)
 	F(s3io.Log.Debug, "S3MultipartUploadWriter.New(key=%s)", key)
 	oow := &S3MultipartUploadWriter{
-		Ctx:                  combineContext(s3io.Ctx, req.Context()),
-		Bucket:               s3io.Bucket.Bucket,
-		Key:                  key,
-		S3:                   s3io.Bucket.S3(sess),
-		ServerSideEncryption: s3io.ServerSideEncryption,
-		Log:                  s3io.Log,
-		MaxObjectSize:        maxObjectSize,
-		PartitionPool:        s3io.PartitionPool,
-		PhantomObjectMap:     s3io.PhantomObjectMap,
-		Info:                 info,
-		RequestMethod:        req.Method,
-		UploadChan:           s3io.UploadChan,
+		Ctx:                    combineContext(s3io.Ctx, req.Context()),
+		Bucket:                 s3io.Bucket.Bucket,
+		Key:                    key,
+		S3:                     s3io.Bucket.S3(sess),
+		ServerSideEncryption:   s3io.ServerSideEncryption,
+		Log:                    s3io.Log,
+		MaxObjectSize:          maxObjectSize,
+		UploadMemoryBufferPool: s3io.UploadMemoryBufferPool,
+		PhantomObjectMap:       s3io.PhantomObjectMap,
+		Info:                   info,
+		RequestMethod:          req.Method,
+		UploadChan:             s3io.UploadChan,
 	}
 	s3io.PhantomObjectMap.Add(info)
 	return oow, nil

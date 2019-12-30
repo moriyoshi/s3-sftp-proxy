@@ -134,16 +134,16 @@ func TestMultipartUploadSinglePart(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("01234567890"), 0)
 	assert.NoError(t, err)
@@ -168,16 +168,16 @@ func TestMultipartUploadPendingPartOnSinglePut(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 7)
 	assert.NoError(t, err)
@@ -203,16 +203,16 @@ func TestMultipartUploadErrorPutObject(t *testing.T) {
 		errorPutObjectCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 0)
 	assert.NoError(t, err)
@@ -237,16 +237,16 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 0)
 	assert.NoError(t, err)
@@ -271,16 +271,16 @@ func TestMultipartUploadFillingPart(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 10, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 10, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("01234"), 0)
 	assert.NoError(t, err)
@@ -309,16 +309,16 @@ func TestMultipartUploadMultiPartNotLockings(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 10, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 10, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 0)
 	assert.NoError(t, err)
@@ -345,16 +345,16 @@ func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("01234567890123456789012345"), 0)
 	assert.NoError(t, err)
@@ -379,16 +379,16 @@ func TestMultipartUploadMultiplePartMultipleWriteAt(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	for c := 0; c < 2; c++ {
 		_, err := u.WriteAt([]byte("0123456789"), 10*int64(c))
@@ -414,16 +414,16 @@ func TestMultipartUploadMultiplePartIgnoredOverlapping(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	for c := 0; c < 2; c++ {
 		_, err := u.WriteAt([]byte("0123456789"), 0)
@@ -450,16 +450,16 @@ func TestMultipartUploadMaxObjectSizeErrorSingleWrite(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        3,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          3,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 0)
 	assert.Error(t, err)
@@ -484,16 +484,16 @@ func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        12,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          12,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 0)
 	assert.NoError(t, err)
@@ -520,16 +520,16 @@ func TestMultipartUploadPendingParts(t *testing.T) {
 		partSize: partSize,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 5, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 7)
 	assert.NoError(t, err)
@@ -555,16 +555,16 @@ func TestMultipartUploadErrorCreatingMultipartUploadOnClose(t *testing.T) {
 		errorCreateMultipartUploadCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 5, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789"), 7)
 	assert.NoError(t, err)
@@ -590,16 +590,16 @@ func TestMultipartUploadErrorCreatingMultipartUploadOnWrite(t *testing.T) {
 		errorCreateMultipartUploadCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 5, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("0123456789012"), 0)
 	assert.Error(t, err)
@@ -624,16 +624,16 @@ func TestMultipartUploadErrorUploadingPartDetectedOnNextWrite(t *testing.T) {
 		errorUploadPartCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 5, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("012345678901234"), 0)
 	assert.NoError(t, err)
@@ -660,16 +660,16 @@ func TestMultipartUploadPartPending(t *testing.T) {
 		errorUploadPartCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 5, 5*time.Second),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 5, 5*time.Second),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("012345678901"), 0)
 	assert.NoError(t, err)
@@ -697,16 +697,16 @@ func TestMultipartUploadPoolFull(t *testing.T) {
 		errorUploadPartCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 100*time.Millisecond),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 100*time.Millisecond),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("012345678901"), 7)
 	assert.Error(t, err)
@@ -731,16 +731,16 @@ func TestMultipartUploadErrorasdf(t *testing.T) {
 		errorUploadPartCalls: 1,
 	}
 	u := &S3MultipartUploadWriter{
-		Ctx:                  context.Background(),
-		S3:                   m,
-		PartitionPool:        NewPartitionPool(context.Background(), partSize, 1, 100*time.Millisecond),
-		RequestMethod:        "read",
-		Log:                  log,
-		PhantomObjectMap:     NewPhantomObjectMap(),
-		Info:                 &PhantomObjectInfo{Key: Path{"", "a", "b"}},
-		UploadChan:           ch,
-		MaxObjectSize:        -1,
-		ServerSideEncryption: &ServerSideEncryptionConfig{},
+		Ctx:                    context.Background(),
+		S3:                     m,
+		UploadMemoryBufferPool: NewMemoryBufferPool(context.Background(), partSize, 1, 100*time.Millisecond),
+		RequestMethod:          "read",
+		Log:                    log,
+		PhantomObjectMap:       NewPhantomObjectMap(),
+		Info:                   &PhantomObjectInfo{Key: Path{"", "a", "b"}},
+		UploadChan:             ch,
+		MaxObjectSize:          -1,
+		ServerSideEncryption:   &ServerSideEncryptionConfig{},
 	}
 	_, err := u.WriteAt([]byte("012345678901"), 7)
 	assert.Error(t, err)

@@ -28,19 +28,19 @@ var (
 		Help: "The number of users connected now",
 	},
 	)
-	mMemoryPoolMax = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "sftp_memory_pool_max",
-		Help: "The number of maximum memory buffers in pool",
+	mMemoryBufferPoolMax = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "sftp_memory_buffer_pool_max",
+		Help: "The number of maximum memory buffers in the pool",
 	},
 	)
-	mMemoryPoolUsed = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "sftp_memory_pool_used",
-		Help: "The number of memory buffers in pool used",
+	mMemoryBufferPoolUsed = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "sftp_memory_buffer_pool_used",
+		Help: "The number of memory buffers used in the pool",
 	},
 	)
-	mMemoryPoolTimeouts = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "sftp_memory_pool_timeouts",
-		Help: "The total number of memory pool timeouts",
+	mMemoryBufferPoolTimeouts = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sftp_memory_buffer_pool_timeouts",
+		Help: "The total number of timeouts produced in the pool",
 	},
 	)
 )

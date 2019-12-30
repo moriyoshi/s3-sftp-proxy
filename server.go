@@ -23,7 +23,7 @@ type Server struct {
 	*ssh.ServerConfig
 	*S3Buckets
 	*PhantomObjectMap
-	*PartitionPool
+	UploadMemoryBufferPool   *MemoryBufferPool
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
@@ -33,7 +33,7 @@ type Server struct {
 }
 
 // NewServer creates a new sftp server
-func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, poolSize int, poolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
+func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, uploadMemoryBufferPoolSize int, uploadMemoryBufferPoolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
 	return &Server{
 		S3Buckets:                buckets,
 		ServerConfig:             serverConfig,
@@ -41,7 +41,7 @@ func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.Server
 		ReaderLookbackBufferSize: readerLookbackBufferSize,
 		ReaderMinChunkSize:       readerMinChunkSize,
 		ListerLookbackBufferSize: listerLookbackBufferSize,
-		PartitionPool:            NewPartitionPool(ctx, partSize, poolSize, poolTimeout),
+		UploadMemoryBufferPool:   NewMemoryBufferPool(ctx, partSize, uploadMemoryBufferPoolSize, uploadMemoryBufferPoolTimeout),
 		PhantomObjectMap:         NewPhantomObjectMap(),
 		Now:                      time.Now,
 		UploadChan:               uploadChan,
@@ -68,7 +68,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				ReaderLookbackBufferSize: s.ReaderLookbackBufferSize,
 				ReaderMinChunkSize:       s.ReaderMinChunkSize,
 				ListerLookbackBufferSize: s.ListerLookbackBufferSize,
-				PartitionPool:            s.PartitionPool,
+				UploadMemoryBufferPool:   s.UploadMemoryBufferPool,
 				Log:                      s.Log,
 				PhantomObjectMap:         s.PhantomObjectMap,
 				Perms:                    bucket.Perms,

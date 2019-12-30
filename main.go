@@ -199,9 +199,9 @@ func main() {
 			*cfg.ReaderLookbackBufferSize,
 			*cfg.ReaderMinChunkSize,
 			*cfg.ListerLookbackBufferSize,
-			*cfg.PartitionSize,
-			*cfg.PoolSize,
-			(*cfg.PoolTimeout).Duration,
+			*cfg.UploadMemoryBufferSize,
+			*cfg.UploadMemoryBufferPoolSize,
+			(*cfg.UploadMemoryBufferPoolTimeout).Duration,
 			uploadChan,
 		).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
 	}()

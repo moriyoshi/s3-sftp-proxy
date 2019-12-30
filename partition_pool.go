@@ -24,7 +24,7 @@ func NewPartitionPool(ctx context.Context, partSize int, poolSize int, timeout t
 		ctx:      ctx,
 		timeout:  timeout,
 	}
-	mMemoryPoolsMax.Add(float64(poolSize))
+	mMemoryPoolMax.Add(float64(poolSize))
 	for ; poolSize > 0; poolSize-- {
 		p.ch <- make([]byte, p.PartSize)
 	}
@@ -37,9 +37,10 @@ func (p *PartitionPool) Get() ([]byte, error) {
 	case <-p.ctx.Done():
 		return nil, fmt.Errorf("partition pool get canceled")
 	case <-time.After(p.timeout):
+		mMemoryPoolTimeouts.Inc()
 		return nil, fmt.Errorf("timeout getting partition from pool")
 	case res := <-p.ch:
-		mMemoryPoolsUsed.Inc()
+		mMemoryPoolUsed.Inc()
 		atomic.AddInt32(&p.Used, 1)
 		return res, nil
 	}
@@ -49,5 +50,5 @@ func (p *PartitionPool) Get() ([]byte, error) {
 func (p *PartitionPool) Put(buf []byte) {
 	p.ch <- buf
 	atomic.AddInt32(&p.Used, -1)
-	mMemoryPoolsUsed.Dec()
+	mMemoryPoolUsed.Dec()
 }

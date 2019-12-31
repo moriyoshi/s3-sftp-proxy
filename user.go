@@ -6,19 +6,22 @@ import (
 	"net"
 
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/ssh"
 )
 
-type User struct {
-	Name       string
-	Password   string
-	PublicKeys []ssh.PublicKey
+type User interface {
+	ValidatePassword(pwd []byte) bool
+	GetPublicKeys() []ssh.PublicKey
+	GetName() string
+	HasPublicKeys() bool
+	HasPassword() bool
 }
 
 type UserStore struct {
 	Name     string
-	Users    []*User
-	usersMap map[string]*User
+	Users    []User
+	usersMap map[string]User
 }
 
 type UserInfo struct {
@@ -32,12 +35,12 @@ func (ui *UserInfo) String() string {
 
 type UserStores map[string]UserStore
 
-func (us *UserStore) Add(u *User) {
+func (us *UserStore) Add(u User) {
 	us.Users = append(us.Users, u)
-	us.usersMap[u.Name] = u
+	us.usersMap[u.GetName()] = u
 }
 
-func (us *UserStore) Lookup(name string) *User {
+func (us *UserStore) Lookup(name string) User {
 	u, _ := us.usersMap[name]
 	return u
 }
@@ -55,7 +58,7 @@ func parseAuthorizedKeys(pubKeys []ssh.PublicKey, pubKeyFileContent []byte) ([]s
 	return pubKeys, nil
 }
 
-func buildUsersFromAuthConfigInplace(users []*User, aCfg *AuthConfig) ([]*User, error) {
+func buildUsersFromAuthConfigInplace(users []User, aCfg *AuthConfig) ([]User, error) {
 	for name, params := range aCfg.Users {
 		var pubKeys []ssh.PublicKey
 		if params.PublicKeys != "" {
@@ -76,16 +79,27 @@ func buildUsersFromAuthConfigInplace(users []*User, aCfg *AuthConfig) ([]*User, 
 				return users, errors.Wrapf(err, `user "%s"`, name)
 			}
 		}
-		users = append(users, &User{
-			Name:       name,
-			Password:   params.Password,
-			PublicKeys: pubKeys,
-		})
+		switch params.AuthenticationMethod {
+		case "bcrypt":
+			users = append(users, &UserBcryptPassword{UserWithPassword{
+				name:       name,
+				password:   params.Password,
+				publicKeys: pubKeys,
+			},
+			})
+		default:
+			users = append(users, &UserPlainTextPassword{UserWithPassword{
+				name:       name,
+				password:   params.Password,
+				publicKeys: pubKeys,
+			},
+			})
+		}
 	}
 	return users, nil
 }
 
-func buildUsersFromAuthConfig(users []*User, aCfg *AuthConfig) ([]*User, error) {
+func buildUsersFromAuthConfig(users []User, aCfg *AuthConfig) ([]User, error) {
 	switch aCfg.Type {
 	case "inplace":
 		return buildUsersFromAuthConfigInplace(users, aCfg)
@@ -98,16 +112,64 @@ func NewUserStoresFromConfig(cfg *S3SFTPProxyConfig) (UserStores, error) {
 	uStores := UserStores{}
 	for name, aCfg := range cfg.AuthConfigs {
 		var err error
-		var users []*User
+		var users []User
 		users, err = buildUsersFromAuthConfig(users, aCfg)
 		if err != nil {
 			return nil, err
 		}
-		usersMap := map[string]*User{}
+		usersMap := map[string]User{}
 		for _, u := range users {
-			usersMap[u.Name] = u
+			usersMap[u.GetName()] = u
 		}
 		uStores[name] = UserStore{Name: name, Users: users, usersMap: usersMap}
 	}
 	return uStores, nil
+}
+
+// UserWithPassword user with password. Used as base struct for other users that has a password.
+type UserWithPassword struct {
+	name       string
+	password   string
+	publicKeys []ssh.PublicKey
+}
+
+// GetPublicKeys gets public keys
+func (u *UserWithPassword) GetPublicKeys() []ssh.PublicKey {
+	return u.publicKeys
+}
+
+// GetName gets user name
+func (u *UserWithPassword) GetName() string {
+	return u.name
+}
+
+// HasPublicKeys wether the user has public keys or not
+func (u *UserWithPassword) HasPublicKeys() bool {
+	return u.publicKeys != nil
+}
+
+// HasPassword wether the user has a password or not
+func (u *UserWithPassword) HasPassword() bool {
+	return u.password != ""
+}
+
+// UserPlainTextPassword user with plain text password
+type UserPlainTextPassword struct {
+	UserWithPassword
+}
+
+// ValidatePassword validates a password
+func (u *UserPlainTextPassword) ValidatePassword(pwd []byte) bool {
+	return u.password != "" && u.password == string(pwd)
+}
+
+// UserBcryptPassword user with password encrypted using bcrypt
+type UserBcryptPassword struct {
+	UserWithPassword
+}
+
+// ValidatePassword validates a password
+func (u *UserBcryptPassword) ValidatePassword(pwd []byte) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(u.password), pwd)
+	return err == nil
 }

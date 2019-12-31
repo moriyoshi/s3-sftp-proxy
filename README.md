@@ -262,6 +262,14 @@ public_keys = """
 ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 """
+
+[auth.test.users.user2]
+authentication_method = "bcrypt"
+password = "$2a$04$IdGko3VpUeqY/HEFv5olLOa/E.dswOKxSEivXDSYnvXLWRQyJSFOi" # test
+public_keys = """
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+"""
 ```
 
 Or
@@ -273,15 +281,20 @@ type = "inplace"
 [auth.test.users]
 user0 = { password="test", public_keys="..." }
 user1 = { password="test", public_keys="..." }
+user2 = { authentication_method="bcrypt", password="$2a$04$IdGko3VpUeqY/HEFv5olLOa/E.dswOKxSEivXDSYnvXLWRQyJSFOi", public_keys="..." }
 ```
 
-* (key) (appears as `user0` or `user1` in the above example)
+* (key) (appears as `user0`, `user1` or `user2` in the above example)
 
     Specifies the name of the user.
 
+* `authentication_method` (optional, defaults to `plain`)
+
+		Specifies the encryption method used to decrypt the password. Allowed values are: `plain` (default value), and `bcrypt`. Tool [bcrypt-cli](https://github.com/bitnami/bcrypt-cli) can be used to generate passwords.
+
 * `password` (optional)
 
-    Specifies the password in a clear-text form.
+    Specifies the password in a clear-text form (when `authentication_method` is not set or is set to `plain`) or encrypted using bcrypt.
 
 * `public_keys` (optional)
 

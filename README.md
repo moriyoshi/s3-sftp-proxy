@@ -43,9 +43,9 @@ reader_lookback_buffer_size = 1048576
 reader_min_chunk_size = 262144
 lister_lookback_buffer_size = 100
 
-partition_size = 5242880
-pool_size = 10
-pool_timeout = "5s"
+upload_memory_buffer_size = 5242880
+upload_memory_buffer_pool_size = 10
+upload_memory_buffer_pool_timeout = "5s"
 upload_workers_count = 2
 
 metrics_bind = ":2112"
@@ -322,13 +322,13 @@ user1 = { password="test", public_keys="..." }
 ### Uploads
 
 `s3-sftp-proxy` uses S3 multipart upload (details on [](https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html)) for those
-objects bigger than or equal to `partition_size` parameter or S3 put object (details on [](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)) in other case.
+objects bigger than or equal to `upload_memory_buffer_size` parameter or S3 put object (details on [](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)) in other case.
 
-In order to optimize uploads to S3 and reduce the amount of memory needed, `s3-sftp-proxy` uses internal memory buffers (called memory pool internally). The size of each buffer is defined by `partition_size`, meanwhile the total number is defined by `pool_size`. As the pool can be filled completely (by using all available buffers), a `pool_timeout` is defined to raise an error when the pool is full and an upload is waiting for a memory buffer this amount of time.
+In order to optimize uploads to S3 and reduce the amount of memory needed, `s3-sftp-proxy` uses internal memory buffers (called memory pool internally). The size of each buffer is defined by `upload_memory_buffer_size`, meanwhile the total number is defined by `upload_memory_buffer_pool_size`. As the pool can be filled completely (by using all available buffers), a `upload_memory_buffer_pool_timeout` is defined to raise an error when the pool is full and an upload is waiting for a memory buffer this amount of time.
 
 Finally, in order to make uploads concurrently to S3, several upload workers are started. The amount of workers is defined by `upload_workers_count`.
 
-Given previous information, the maximum amount of memory used internally for buffers to upload to S3 can be calculted by: `partition_size * pool_size`. This amount of memory is considerably lower than storing the entire file in memory. However, if pool
-is full, an error will be raised and the file will not be uploaded. This kind of errors can be easily on metric `sftp_memory_pool_timeouts`.
+Given previous information, the maximum amount of memory used internally for buffers to upload to S3 can be calculted by: `upload_memory_buffer_size * upload_memory_buffer_pool_size`. This amount of memory is considerably lower than storing the entire file in memory. However, if pool
+is full, an error will be raised and the file will not be uploaded. This kind of errors can be easily on metric `sftp_memory_buffer_pool_timeouts`.
 
-As an example, imagine you want to upload a 12MB size file (and we are using the default value for `partition_size`, which is 5MB) using `sftp` tool. This tool uploads 32KB chunks in parallel, so chunks arrives to the server without order. When first chunk is received on the server, `s3-sftp-proxy` gets a buffer memory from the pool and inserts the data in their place. When the buffer is full (5MB are present on the server), a [CreateMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request is performed to S3 and an upload to S3 is enqueued to the workers. One upload worker will take this upload from the queue, upload its content to S3 using an [UploadPart](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) request, and returned the buffer memory to the pool (releasing it). Meanwhile, more data from the client is received and stored on a different buffer. Finally, when the entire file is uploaded, pending data is uploaded to S3 via UploadPart. Finally, when all data is present on S3, a [CompleteMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) request is sent to S3 to finish the upload.
+As an example, imagine you want to upload a 12MB size file (and we are using the default value for `upload_memory_buffer_size`, which is 5MB) using `sftp` tool. This tool uploads 32KB chunks in parallel, so chunks arrives to the server without order. When first chunk is received on the server, `s3-sftp-proxy` gets a buffer memory from the pool and inserts the data in their place. When the buffer is full (5MB are present on the server), a [CreateMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request is performed to S3 and an upload to S3 is enqueued to the workers. One upload worker will take this upload from the queue, upload its content to S3 using an [UploadPart](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) request, and returned the buffer memory to the pool (releasing it). Meanwhile, more data from the client is received and stored on a different buffer. Finally, when the entire file is uploaded, pending data is uploaded to S3 via UploadPart. Finally, when all data is present on S3, a [CompleteMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) request is sent to S3 to finish the upload.

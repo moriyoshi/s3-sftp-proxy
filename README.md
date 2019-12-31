@@ -26,7 +26,7 @@ Usage of s3-sftp-proxy:
 
 	Turn on debug logging.  The output will be more verbose.
 
- 
+
 ## Configuation
 
 The configuration file is in [TOML](https://github.com/toml-lang/toml) format.  Refer to that page for the detailed explanation of the syntax.
@@ -42,6 +42,14 @@ Welcome to my SFTP server
 reader_lookback_buffer_size = 1048576
 reader_min_chunk_size = 262144
 lister_lookback_buffer_size = 100
+
+upload_memory_buffer_size = 5242880
+upload_memory_buffer_pool_size = 10
+upload_memory_buffer_pool_timeout = "5s"
+upload_workers_count = 2
+
+metrics_bind = ":2112"
+metrics_endpoint = "/metrics"
 
 # buckets and authantication settings follow...
 ```
@@ -60,6 +68,14 @@ lister_lookback_buffer_size = 100
 
 	Specifies the local address and port to listen on.
 
+* `metrics_bind` (optional, defaults to `":2112"`)
+
+  Specifies the local address and port metrics.
+
+* `metrics_endpoint` (optional, defaults to `"/metrics"`)
+
+	Specifies the metrics endpoint.
+
 * `banner` (optional, defaults to an empty string)
 
 	A banner is a message text that will be sent to the client when the connection is esablished to the server prior to any authentication steps.
@@ -72,9 +88,25 @@ lister_lookback_buffer_size = 100
 
 	Specifies the amount of data fetched from S3 at once.  Increase the value when you experience quite a poor performance.
 
-* `lister_lookback_buffer_size` (optional, defalts to `100`)
+* `lister_lookback_buffer_size` (optional, defaults to `100`)
 
 	Contrary to the people's expectation, SFTP also requires file listings to be retrieved in random-access as well.
+
+* `upload_memory_buffer_size` (optional, defaults to `5242880`)
+
+  Bytes used as internal memory buffer to upload files to S3, and to divide a file into several parts to upload to S3 (details on (Uploads section)[#uploads]).
+
+* `upload_memory_buffer_pool_size` (optional, defaults to `10`)
+
+  Number of internal memory buffers of size `upload_memory_buffer_size` used for upload purposes. Details on (Uploads section)[#uploads].
+
+* `upload_memory_buffer_pool_timeout` (optional, defaults to `"5s"`)
+
+	Maximum amount of time to wait to wait for an available memory buffer from pool on uploads. This timeout is useful when the pool is full. Details on (Uploads section)[#uploads].
+
+* `upload_workers_count` (optional, defaults to `2`)
+
+  Number of workers used to upload parts to S3. Details on (Uploads section)[#uploads].
 
 * `buckets` (required)
 
@@ -115,8 +147,8 @@ aws_secret_access_key = "bbb"
 	Specifies s3 endpoint (server) different from AWS.
 
 * `s3_force_path_style` (optional)
-    This option should be set to `true` if ypu use endpount different from AWS.
-    
+    This option should be set to `true` if you use endpoint different from AWS.
+
 	Set this to `true` to force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`).
 
 * `disable_ssl` (optional)
@@ -127,7 +159,7 @@ aws_secret_access_key = "bbb"
 	Specifies the bucket name.
 
 * `key_prefix` (required when `bucket_url` is unspecified)
-	
+
 	Specifies the prefix prepended to the file path sent from the client.  The key string is derived as follows:
 
 		`key` = `key_prefix` + `path`
@@ -147,11 +179,11 @@ aws_secret_access_key = "bbb"
 * `credentials` (optional)
 
     * `credentials.aws_access_key_id` (required)
-    
+
         Specifies the AWS access key.
 
     * `credentials.aws_secret_access_key` (required)
-    
+
         Specifies the AWS secret access key.
 
 * `max_object_size` (optional, defaults to unlimited)
@@ -230,9 +262,17 @@ public_keys = """
 ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 """
+
+[auth.test.users.user2]
+authentication_method = "bcrypt"
+password = "$2a$04$IdGko3VpUeqY/HEFv5olLOa/E.dswOKxSEivXDSYnvXLWRQyJSFOi" # test
+public_keys = """
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ssh-rsa AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+"""
 ```
 
-Or 
+Or
 
 ```toml
 [auth.test]
@@ -241,17 +281,67 @@ type = "inplace"
 [auth.test.users]
 user0 = { password="test", public_keys="..." }
 user1 = { password="test", public_keys="..." }
+user2 = { authentication_method="bcrypt", password="$2a$04$IdGko3VpUeqY/HEFv5olLOa/E.dswOKxSEivXDSYnvXLWRQyJSFOi", public_keys="..." }
 ```
 
-* (key) (appears as `user0` or `user1` in the above example)
+* (key) (appears as `user0`, `user1` or `user2` in the above example)
 
     Specifies the name of the user.
 
+* `authentication_method` (optional, defaults to `plain`)
+
+		Specifies the encryption method used to decrypt the password. Allowed values are: `plain` (default value), and `bcrypt`. Tool [bcrypt-cli](https://github.com/bitnami/bcrypt-cli) can be used to generate passwords.
+
 * `password` (optional)
 
-    Specifies the password in a clear-text form.
+    Specifies the password in a clear-text form (when `authentication_method` is not set or is set to `plain`) or encrypted using bcrypt.
 
 * `public_keys` (optional)
 
     Specifies the public keys authorized to use in authentication.  Multiple keys can be specified by delimiting them by newlines.
 
+### Prometheus metrics
+
+* `sftp_operation_status` _(counter)_
+
+    Represents SFTP operation statuses count by method
+
+* `sftp_aws_session_error` _(counter)_
+
+    AWS S3 session errors count
+
+* `sftp_permissions_error` _(counter)_
+
+    Bucket permission errors count by method
+
+* `sftp_users_connected` _(gauge)_
+
+		Number of users connected to the server in certain moment.
+
+* `sftp_memory_buffer_pool_max` _(gauge)_
+
+		Number of memory buffers that can be requested in the pool.
+
+* `sftp_memory_buffer_pool_used` _(gauge)_
+
+    Number of memory buffers used current in the pool.
+
+* `sftp_memory_buffer_pool_timeouts` _(gauge)_
+
+    Number of timeouts produced in the pool when a memory buffer was requested.
+
+## Internals
+
+### Uploads
+
+`s3-sftp-proxy` uses S3 multipart upload (details on [](https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html)) for those
+objects bigger than or equal to `upload_memory_buffer_size` parameter or S3 put object (details on [](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)) in other case.
+
+In order to optimize uploads to S3 and reduce the amount of memory needed, `s3-sftp-proxy` uses internal memory buffers (called memory pool internally). The size of each buffer is defined by `upload_memory_buffer_size`, meanwhile the total number is defined by `upload_memory_buffer_pool_size`. As the pool can be filled completely (by using all available buffers), a `upload_memory_buffer_pool_timeout` is defined to raise an error when the pool is full and an upload is waiting for a memory buffer this amount of time.
+
+Finally, in order to make uploads concurrently to S3, several upload workers are started. The amount of workers is defined by `upload_workers_count`.
+
+Given previous information, the maximum amount of memory used internally for buffers to upload to S3 can be calculted by: `upload_memory_buffer_size * upload_memory_buffer_pool_size`. This amount of memory is considerably lower than storing the entire file in memory. However, if pool
+is full, an error will be raised and the file will not be uploaded. This kind of errors can be easily on metric `sftp_memory_buffer_pool_timeouts`.
+
+As an example, imagine you want to upload a 12MB size file (and we are using the default value for `upload_memory_buffer_size`, which is 5MB) using `sftp` tool. This tool uploads 32KB chunks in parallel, so chunks arrives to the server without order. When first chunk is received on the server, `s3-sftp-proxy` gets a buffer memory from the pool and inserts the data in their place. When the buffer is full (5MB are present on the server), a [CreateMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request is performed to S3 and an upload to S3 is enqueued to the workers. One upload worker will take this upload from the queue, upload its content to S3 using an [UploadPart](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) request, and returned the buffer memory to the pool (releasing it). Meanwhile, more data from the client is received and stored on a different buffer. Finally, when the entire file is uploaded, pending data is uploaded to S3 via UploadPart. Finally, when all data is present on S3, a [CompleteMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) request is sent to S3 to finish the upload.

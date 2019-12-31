@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
@@ -44,7 +45,7 @@ func buildSSHServerConfig(buckets *S3Buckets, cfg *S3SFTPProxyConfig) (*ssh.Serv
 				return nil, fmt.Errorf("unknown user: %s", c.User())
 			}
 			u := bucket.Users.Lookup(c.User())
-			if u.Password != "" && u.Password == string(passwd) {
+			if u.ValidatePassword(passwd) {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("passwords do not match")
@@ -55,9 +56,9 @@ func buildSSHServerConfig(buckets *S3Buckets, cfg *S3SFTPProxyConfig) (*ssh.Serv
 				return nil, fmt.Errorf("unknown user: %s", c.User())
 			}
 			u := bucket.Users.Lookup(c.User())
-			if u.PublicKeys != nil {
+			if u.HasPublicKeys() {
 				keyMarshaled := key.Marshal()
-				for _, herKey := range u.PublicKeys {
+				for _, herKey := range u.GetPublicKeys() {
 					if herKey.Type() == key.Type() && len(herKey.Marshal()) == len(keyMarshaled) && bytes.Compare(herKey.Marshal(), keyMarshaled) == 0 {
 						return &ssh.Permissions{
 							Extensions: map[string]string{
@@ -78,14 +79,14 @@ func buildSSHServerConfig(buckets *S3Buckets, cfg *S3SFTPProxyConfig) (*ssh.Serv
 				return nil, fmt.Errorf("keyboard interactive authentication not enabled")
 			}
 			u := bucket.Users.Lookup(c.User())
-			if u.Password == "" {
+			if !u.HasPassword() {
 				return nil, fmt.Errorf("no credentials are present")
 			}
-			answers, err := client(u.Name, "", []string{"Password: "}, []bool{false})
+			answers, err := client(u.GetName(), "", []string{"Password: "}, []bool{false})
 			if err != nil {
 				return nil, errors.Wrapf(err, "keyboard interactive conversation failed")
 			}
-			if answers[0] != u.Password {
+			if !u.ValidatePassword([]byte(answers[0])) {
 				return nil, fmt.Errorf("passwords do not match")
 			}
 			return nil, nil
@@ -157,24 +158,52 @@ func main() {
 	defer lsnr.Close()
 	logger.Info("Listen on ", _bind)
 
+	metricsBind := cfg.MetricsBind
+	if metricsBind == "" {
+		metricsBind = ":2112"
+	}
+
+	metricsEndpoint := cfg.MetricsEndpoint
+	if metricsEndpoint == "" {
+		metricsEndpoint = "/metrics"
+	}
+
+	http.Handle(metricsEndpoint, promhttp.Handler())
+
+	go func() {
+		http.ListenAndServe(metricsBind, nil)
+	}()
+
+	logger.Info("Metrics listen on ", metricsBind, metricsEndpoint)
+
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	sigChan := make(chan os.Signal)
 	signal.Notify(sigChan, os.Interrupt)
 
+	uploadWorkers := NewS3UploadWorkers(ctx, *cfg.UploadWorkersCount, logger)
+	uploadChan := uploadWorkers.Start()
+
+	defer func() {
+		cancel()
+		uploadWorkers.WaitForCompletion()
+	}()
+
 	errChan := make(chan error)
 	go func() {
-		errChan <- (&Server{
-			S3Buckets:                buckets,
-			ServerConfig:             sCfg,
-			Log:                      logger,
-			ReaderLookbackBufferSize: *cfg.ReaderLookbackBufferSize,
-			ReaderMinChunkSize:       *cfg.ReaderMinChunkSize,
-			ListerLookbackBufferSize: *cfg.ListerLookbackBufferSize,
-			PhantomObjectMap:         NewPhantomObjectMap(),
-			Now:                      time.Now,
-		}).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
+		errChan <- NewServer(
+			ctx,
+			buckets,
+			sCfg,
+			logger,
+			*cfg.ReaderLookbackBufferSize,
+			*cfg.ReaderMinChunkSize,
+			*cfg.ListerLookbackBufferSize,
+			*cfg.UploadMemoryBufferSize,
+			*cfg.UploadMemoryBufferPoolSize,
+			(*cfg.UploadMemoryBufferPoolTimeout).Duration,
+			uploadChan,
+		).RunListenerEventLoop(ctx, lsnr.(*net.TCPListener))
 	}()
 
 outer:

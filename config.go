@@ -2,17 +2,23 @@ package main
 
 import (
 	"fmt"
-	"github.com/BurntSushi/toml"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/url"
+	"time"
+
+	"github.com/BurntSushi/toml"
+	"github.com/pkg/errors"
 )
 
 var (
-	minReaderLookbackBufferSize = 1048576
-	minReaderMinChunkSize       = 262144
-	minListerLookbackBufferSize = 100
-	vTrue                       = true
+	minReaderLookbackBufferSize          = 1048576
+	minReaderMinChunkSize                = 262144
+	minListerLookbackBufferSize          = 100
+	defaultUploadMemoryBufferSize        = 5 * 1024 * 1024 // 5 MB
+	defaultUploadMemoryBufferPoolSize    = 10
+	defaultUploadMemoryBufferPoolTimeout = 5 * time.Second
+	defaultUploadWorkersCount            = 2
+	vTrue                                = true
 )
 
 type URL struct {
@@ -22,6 +28,15 @@ type URL struct {
 func (u *URL) UnmarshalText(text []byte) (err error) {
 	u.URL, err = url.Parse(string(text))
 	return
+}
+
+type duration struct {
+	time.Duration
+}
+
+func (d *duration) UnmarshalText(text []byte) (err error) {
+	d.Duration, err = time.ParseDuration(string(text))
+	return err
 }
 
 type AWSCredentialsConfig struct {
@@ -41,7 +56,7 @@ type S3BucketConfig struct {
 	BucketUrl                      *URL                     `toml:"bucket_url"`
 	Auth                           string                   `toml:"auth"`
 	MaxObjectSize                  *int64                   `toml:"max_object_size"`
-	Readable                       *bool                    `toml:"readble"`
+	Readable                       *bool                    `toml:"readable"`
 	Writable                       *bool                    `toml:"writable"`
 	Listable                       *bool                    `toml:"listable"`
 	ServerSideEncryption           ServerSideEncryptionType `toml:"server_side_encryption"`
@@ -51,9 +66,10 @@ type S3BucketConfig struct {
 }
 
 type AuthUser struct {
-	Password      string `toml:"password"`
-	PublicKeys    string `toml:"public_keys"`
-	PublicKeyFile string `toml:"public_key_file"`
+	Password             string `toml:"password"`
+	AuthenticationMethod string `toml:"authentication_method"`
+	PublicKeys           string `toml:"public_keys"`
+	PublicKeyFile        string `toml:"public_key_file"`
 }
 
 type AuthConfig struct {
@@ -63,14 +79,20 @@ type AuthConfig struct {
 }
 
 type S3SFTPProxyConfig struct {
-	Bind                     string                     `toml:"bind"`
-	HostKeyFile              string                     `toml:"host_key_file"`
-	Banner                   string                     `toml:"banner"`
-	ReaderLookbackBufferSize *int                       `toml:"reader_lookback_buffer_size"`
-	ReaderMinChunkSize       *int                       `toml:"reader_min_chunk_size"`
-	ListerLookbackBufferSize *int                       `toml:"lister_lookback_buffer_size"`
-	Buckets                  map[string]*S3BucketConfig `toml:"buckets"`
-	AuthConfigs              map[string]*AuthConfig     `toml:"auth"`
+	Bind                          string                     `toml:"bind"`
+	HostKeyFile                   string                     `toml:"host_key_file"`
+	Banner                        string                     `toml:"banner"`
+	ReaderLookbackBufferSize      *int                       `toml:"reader_lookback_buffer_size"`
+	ReaderMinChunkSize            *int                       `toml:"reader_min_chunk_size"`
+	ListerLookbackBufferSize      *int                       `toml:"lister_lookback_buffer_size"`
+	UploadMemoryBufferSize        *int                       `toml:"upload_memory_buffer_size"`
+	UploadMemoryBufferPoolSize    *int                       `toml:"upload_memory_buffer_pool_size"`
+	UploadMemoryBufferPoolTimeout *duration                  `toml:"upload_memory_buffer_pool_timeout"`
+	UploadWorkersCount            *int                       `toml:"upload_workers_count"`
+	Buckets                       map[string]*S3BucketConfig `toml:"buckets"`
+	AuthConfigs                   map[string]*AuthConfig     `toml:"auth"`
+	MetricsBind                   string                     `toml:"metrics_bind"`
+	MetricsEndpoint               string                     `toml:"metrics_endpoint"`
 }
 
 func validateAndFixupBucketConfig(bCfg *S3BucketConfig) error {
@@ -177,6 +199,22 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 		cfg.ListerLookbackBufferSize = &minListerLookbackBufferSize
 	} else if *cfg.ListerLookbackBufferSize < minListerLookbackBufferSize {
 		return nil, fmt.Errorf("lister_lookback_buffer_size must be equal to or greater than %d", minListerLookbackBufferSize)
+	}
+
+	if cfg.UploadMemoryBufferSize == nil {
+		cfg.UploadMemoryBufferSize = &defaultUploadMemoryBufferSize
+	}
+
+	if cfg.UploadMemoryBufferPoolSize == nil {
+		cfg.UploadMemoryBufferPoolSize = &defaultUploadMemoryBufferPoolSize
+	}
+
+	if cfg.UploadMemoryBufferPoolTimeout == nil {
+		cfg.UploadMemoryBufferPoolTimeout = &duration{defaultUploadMemoryBufferPoolTimeout}
+	}
+
+	if cfg.UploadWorkersCount == nil {
+		cfg.UploadWorkersCount = &defaultUploadWorkersCount
 	}
 
 	for name, bCfg := range cfg.Buckets {

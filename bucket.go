@@ -188,11 +188,11 @@ func NewS3BucketFromConfig(uStores UserStores, cfg *S3SFTPProxyConfig) (*S3Bucke
 			return nil, errors.Wrapf(err, "bucket config %s", name)
 		}
 		for _, user := range bucket.Users.Users {
-			_bucket, ok := userToBucketMap[user.Name]
+			_bucket, ok := userToBucketMap[user.GetName()]
 			if ok {
-				return nil, fmt.Errorf(`bucket config %s: user "%s" is already assigned to bucket config "%s"`, name, user.Name, _bucket.Name)
+				return nil, fmt.Errorf(`bucket config %s: user "%s" is already assigned to bucket config "%s"`, name, user.GetName(), _bucket.Name)
 			}
-			userToBucketMap[user.Name] = bucket
+			userToBucketMap[user.GetName()] = bucket
 		}
 		buckets[name] = bucket
 	}

@@ -12,19 +12,40 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+type ServerLogger interface {
+	DebugLogger
+	InfoLogger
+	WarnLogger
+	ErrorLogger
+}
+
 type Server struct {
 	*ssh.ServerConfig
 	*S3Buckets
 	*PhantomObjectMap
+	UploadMemoryBufferPool   *MemoryBufferPool
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
-	Log                      interface {
-		DebugLogger
-		InfoLogger
-		ErrorLogger
+	Log                      ServerLogger
+	Now                      func() time.Time
+	UploadChan               chan<- *S3PartToUpload
+}
+
+// NewServer creates a new sftp server
+func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, uploadMemoryBufferPoolSize int, uploadMemoryBufferPoolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
+	return &Server{
+		S3Buckets:                buckets,
+		ServerConfig:             serverConfig,
+		Log:                      logger,
+		ReaderLookbackBufferSize: readerLookbackBufferSize,
+		ReaderMinChunkSize:       readerMinChunkSize,
+		ListerLookbackBufferSize: listerLookbackBufferSize,
+		UploadMemoryBufferPool:   NewMemoryBufferPool(ctx, partSize, uploadMemoryBufferPoolSize, uploadMemoryBufferPoolTimeout),
+		PhantomObjectMap:         NewPhantomObjectMap(),
+		Now:                      time.Now,
+		UploadChan:               uploadChan,
 	}
-	Now func() time.Time
 }
 
 func asHandlers(handlers interface {
@@ -36,7 +57,7 @@ func asHandlers(handlers interface {
 	return sftp.Handlers{handlers, handlers, handlers, handlers}
 }
 
-func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request) {
+func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request, userInfo *UserInfo) {
 	defer s.Log.Debug("HandleChannel ended")
 	server := sftp.NewRequestServer(
 		sshCh,
@@ -47,11 +68,14 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				ReaderLookbackBufferSize: s.ReaderLookbackBufferSize,
 				ReaderMinChunkSize:       s.ReaderMinChunkSize,
 				ListerLookbackBufferSize: s.ListerLookbackBufferSize,
+				UploadMemoryBufferPool:   s.UploadMemoryBufferPool,
 				Log:                      s.Log,
 				PhantomObjectMap:         s.PhantomObjectMap,
 				Perms:                    bucket.Perms,
 				ServerSideEncryption:     &bucket.ServerSideEncryption,
 				Now:                      s.Now,
+				UserInfo:                 userInfo,
+				UploadChan:               s.UploadChan,
 			},
 		),
 	)
@@ -103,9 +127,11 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	defer s.Log.Debug("HandleClient ended")
 	defer func() {
+		mUsersConnected.Dec()
 		F(s.Log.Info, "connection from client %s closed", conn.RemoteAddr().String())
 		conn.Close()
 	}()
+
 	F(s.Log.Info, "connected from client %s", conn.RemoteAddr().String())
 
 	innerCtx, cancel := context.WithCancel(ctx)
@@ -122,7 +148,13 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 		return err
 	}
 
+	userInfo := &UserInfo{
+		Addr: conn.RemoteAddr(),
+		User: sconn.User(),
+	}
+
 	F(s.Log.Info, "user %s logged in", sconn.User())
+	mUsersConnected.Inc()
 	bucket, ok := s.UserToBucketMap[sconn.User()]
 	if !ok {
 		return fmt.Errorf("unknown error: no bucket designated to user %s found", sconn.User())
@@ -160,7 +192,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				s.HandleChannel(innerCtx, bucket, sshCh, reqs)
+				s.HandleChannel(innerCtx, bucket, sshCh, reqs, userInfo)
 			}()
 		}
 	}(chans)
@@ -216,7 +248,7 @@ outer:
 	}
 
 	// drain
-	for _ = range connChan {
+	for range connChan {
 	}
 
 	wg.Wait()

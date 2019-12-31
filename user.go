@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net"
+
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
-	"io/ioutil"
 )
 
 type User struct {
@@ -17,6 +19,15 @@ type UserStore struct {
 	Name     string
 	Users    []*User
 	usersMap map[string]*User
+}
+
+type UserInfo struct {
+	Addr net.Addr
+	User string
+}
+
+func (ui *UserInfo) String() string {
+	return fmt.Sprintf("%s from %s", ui.User, ui.Addr.String())
 }
 
 type UserStores map[string]UserStore

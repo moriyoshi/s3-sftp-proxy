@@ -87,15 +87,16 @@ func (oor *S3GetObjectOutputReader) ReadAt(buf []byte, off int64) (int, error) {
 		r -= n
 	}
 	if r == 0 {
+		mReadsBytesTotal.Add(float64(i))
 		return i, nil
 	}
 
 	if oor.noMore {
 		if i == 0 {
 			return 0, io.EOF
-		} else {
-			return i, nil
 		}
+		mReadsBytesTotal.Add(float64(i))
+		return i, nil
 	}
 
 	F(oor.Log.Debug, "s=%d, len(oor.spooled)=%d, oor.Lookback=%d", s, len(oor.spooled), oor.Lookback)
@@ -145,6 +146,7 @@ func (oor *S3GetObjectOutputReader) ReadAt(buf []byte, off int64) (int, error) {
 				be = s + r
 			}
 			copy(buf[i:], oor.spooled[s:be])
+			mReadsBytesTotal.Add(float64(be - s))
 			return be - s, nil
 		}
 		return 0, io.EOF

@@ -249,6 +249,7 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		bufOffset += partCopied
 		partOffset = 0
 	}
+	mWritesBytesTotal.Add(float64(len(buf)))
 	return len(buf), nil
 }
 

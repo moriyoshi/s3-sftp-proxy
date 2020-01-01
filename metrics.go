@@ -43,4 +43,14 @@ var (
 		Help: "The total number of timeouts produced in the pool",
 	},
 	)
+	mReadsBytesTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sftp_reads_bytes_total",
+		Help: "The total number of bytes read",
+	},
+	)
+	mWritesBytesTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "sftp_writes_bytes_total",
+		Help: "The total number of bytes written",
+	},
+	)
 )

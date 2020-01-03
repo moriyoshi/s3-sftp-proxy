@@ -10,7 +10,6 @@ import (
 	"time"
 
 	aws "github.com/aws/aws-sdk-go/aws"
-	aws_session "github.com/aws/aws-sdk-go/aws/session"
 	aws_s3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pkg/sftp"
 	"github.com/prometheus/client_golang/prometheus"
@@ -512,13 +511,13 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 		mOperationStatus.With(lFailure).Inc()
 		return nil, fmt.Errorf("read operation not allowed as per configuration")
 	}
-	sess, err := aws_session.NewSession()
+	s3, err := s3io.Bucket.S3()
 	if err != nil {
+		s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 		mOperationStatus.With(lFailure).Inc()
 		mAWSSessionError.Inc()
 		return nil, err
 	}
-	s3 := s3io.Bucket.S3(sess)
 	key := buildKey(s3io.Bucket, req.Filepath)
 
 	phInfo := s3io.PhantomObjectMap.Get(key)
@@ -568,8 +567,9 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		mOperationStatus.With(lFailure).Inc()
 		return nil, fmt.Errorf("write operation not allowed as per configuration")
 	}
-	sess, err := aws_session.NewSession()
+	s3, err := s3io.Bucket.S3()
 	if err != nil {
+		s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 		mOperationStatus.With(lFailure).Inc()
 		mAWSSessionError.Inc()
 		return nil, err
@@ -595,7 +595,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 		Ctx:                    combineContext(s3io.Ctx, req.Context()),
 		Bucket:                 s3io.Bucket.Bucket,
 		Key:                    key,
-		S3:                     s3io.Bucket.S3(sess),
+		S3:                     s3,
 		ServerSideEncryption:   s3io.ServerSideEncryption,
 		Log:                    log,
 		MaxObjectSize:          maxObjectSize,
@@ -628,8 +628,9 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			mOperationStatus.With(lIgnored).Inc()
 			return nil
 		}
-		sess, err := aws_session.NewSession()
+		s3, err := s3io.Bucket.S3()
 		if err != nil {
+			s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 			mOperationStatus.With(lFailure).Inc()
 			mAWSSessionError.Inc()
 			return err
@@ -644,7 +645,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		})
 		log.Infof("Renaming key to: %s", destStr)
 		log.Debugf("CopyObject(dest=%s, Sse=%v)", destStr, sse.Type)
-		_, err = s3io.Bucket.S3(sess).CopyObjectWithContext(
+		_, err = s3.CopyObjectWithContext(
 			combineContext(s3io.Ctx, req.Context()),
 			&aws_s3.CopyObjectInput{
 				ACL:                  &aclPrivate,
@@ -664,7 +665,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			return err
 		}
 		log.Debug("DeleteObject")
-		_, err = s3io.Bucket.S3(sess).DeleteObjectWithContext(
+		_, err = s3.DeleteObjectWithContext(
 			combineContext(s3io.Ctx, req.Context()),
 			&aws_s3.DeleteObjectInput{
 				Bucket: &s3io.Bucket.Bucket,
@@ -688,8 +689,9 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			mOperationStatus.With(lIgnored).Inc()
 			return nil
 		}
-		sess, err := aws_session.NewSession()
+		s3, err := s3io.Bucket.S3()
 		if err != nil {
+			s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 			mOperationStatus.With(lFailure).Inc()
 			mAWSSessionError.Inc()
 			return err
@@ -701,7 +703,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		})
 		log.Info("Deleting key")
 		log.Debug("DeleteObject")
-		_, err = s3io.Bucket.S3(sess).DeleteObjectWithContext(
+		_, err = s3.DeleteObjectWithContext(
 			combineContext(s3io.Ctx, req.Context()),
 			&aws_s3.DeleteObjectInput{
 				Bucket: &s3io.Bucket.Bucket,
@@ -722,8 +724,9 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		}
 		key := buildKey(s3io.Bucket, req.Filepath)
 		keyStr := fmt.Sprintf("%s/", key.String())
-		sess, err := aws_session.NewSession()
+		s3, err := s3io.Bucket.S3()
 		if err != nil {
+			s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 			mOperationStatus.With(lFailure).Inc()
 			mAWSSessionError.Inc()
 			return err
@@ -734,7 +737,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		})
 		log.Info("Creating directory")
 		log.Debug("Mkdir")
-		_, err = s3io.Bucket.S3(sess).PutObject(
+		_, err = s3.PutObject(
 			&aws_s3.PutObjectInput{
 				Bucket: &s3io.Bucket.Bucket,
 				Key:    &keyStr,
@@ -754,8 +757,9 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		}
 		key := buildKey(s3io.Bucket, req.Filepath)
 		keyStr := fmt.Sprintf("%s/", key.String())
-		sess, err := aws_session.NewSession()
+		s3, err := s3io.Bucket.S3()
 		if err != nil {
+			s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 			mOperationStatus.With(lFailure).Inc()
 			mAWSSessionError.Inc()
 			return err
@@ -766,7 +770,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 		})
 		log.Info("Deleting directory")
 		log.Debug("Rmdir")
-		_, err = s3io.Bucket.S3(sess).DeleteObject(
+		_, err = s3.DeleteObject(
 			&aws_s3.DeleteObjectInput{
 				Bucket: &s3io.Bucket.Bucket,
 				Key:    &keyStr,
@@ -785,8 +789,9 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 	log := s3io.Log.WithField("method", req.Method)
 	lPermErr := prometheus.Labels{"method": req.Method}
-	sess, err := aws_session.NewSession()
+	s3, err := s3io.Bucket.S3()
 	if err != nil {
+		s3io.Log.WithField("exception", err).Error("Error connecting to AWS")
 		mAWSSessionError.Inc()
 		return nil, err
 	}
@@ -809,7 +814,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 			Bucket:           s3io.Bucket.Bucket,
 			Root:             key.Equal(s3io.Bucket.KeyPrefix),
 			Key:              key,
-			S3:               s3io.Bucket.S3(sess),
+			S3:               s3,
 			PhantomObjectMap: s3io.PhantomObjectMap,
 		}, nil
 	case "List":
@@ -829,7 +834,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 			Ctx:              combineContext(s3io.Ctx, req.Context()),
 			Bucket:           s3io.Bucket.Bucket,
 			Prefix:           prefix,
-			S3:               s3io.Bucket.S3(sess),
+			S3:               s3,
 			Lookback:         s3io.ListerLookbackBufferSize,
 			PhantomObjectMap: s3io.PhantomObjectMap,
 		}, nil

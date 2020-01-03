@@ -8,18 +8,22 @@ import (
 
 	aws "github.com/aws/aws-sdk-go/aws"
 	aws_creds "github.com/aws/aws-sdk-go/aws/credentials"
-	aws_ec2_role_creds "github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
-	aws_ec2_meta "github.com/aws/aws-sdk-go/aws/ec2metadata"
 	aws_session "github.com/aws/aws-sdk-go/aws/session"
 	s3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pkg/errors"
 )
 
+// ServerSideEncryptionType server side encryption type
 type ServerSideEncryptionType int
 
 const (
+	// ServerSideEncryptionTypeNone do not use server side encryption on S3
 	ServerSideEncryptionTypeNone = iota
+
+	// ServerSideEncryptionTypeAES256 use AES256 encryption type
 	ServerSideEncryptionTypeAES256
+
+	// ServerSideEncryptionTypeKMS use KMS as encryption
 	ServerSideEncryptionTypeKMS
 )
 
@@ -30,6 +34,7 @@ var sseNameToEnumMap = map[string]ServerSideEncryptionType{
 	"kms":    ServerSideEncryptionTypeKMS,
 }
 
+// UnmarshalText used to get the server side encryption type from a text present on configuration
 func (v *ServerSideEncryptionType) UnmarshalText(text []byte) error {
 	_v, ok := sseNameToEnumMap[strings.ToLower(string(text))]
 	if !ok {
@@ -39,6 +44,7 @@ func (v *ServerSideEncryptionType) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// ServerSideEncryptionConfig server side encryption configuration
 type ServerSideEncryptionConfig struct {
 	Type           ServerSideEncryptionType
 	CustomerKey    string
@@ -46,20 +52,22 @@ type ServerSideEncryptionConfig struct {
 	KMSKeyId       string
 }
 
+// CustomerAlgorithm customer algorithm server side encryption configuration
 func (cfg *ServerSideEncryptionConfig) CustomerAlgorithm() string {
 	if cfg.Type == ServerSideEncryptionTypeAES256 {
 		return "AES256"
-	} else {
-		return ""
 	}
+	return ""
 }
 
+// Perms permissions
 type Perms struct {
 	Readable bool
 	Writable bool
 	Listable bool
 }
 
+// S3Bucket S3 bucket
 type S3Bucket struct {
 	Name                           string
 	AWSConfig                      *aws.Config
@@ -72,30 +80,36 @@ type S3Bucket struct {
 	KeyboardInteractiveAuthEnabled bool
 }
 
+// S3Buckets S3 buckets
 type S3Buckets struct {
 	Buckets         map[string]*S3Bucket
 	UserToBucketMap map[string]*S3Bucket
 }
 
+// Get gets an S3 bucket given its name
 func (s3bs *S3Buckets) Get(name string) *S3Bucket {
 	b, _ := s3bs.Buckets[name]
 	return b
 }
 
-func (s3b *S3Bucket) S3(sess *aws_session.Session) *s3.S3 {
+// S3 creates a new instance of S3 client
+func (s3b *S3Bucket) S3() (*s3.S3, error) {
 	awsCfg := s3b.AWSConfig
+	var sess *aws_session.Session
+	var err error
+
 	if awsCfg.Credentials == nil {
-		awsCfg = s3b.AWSConfig.WithCredentials(aws_creds.NewChainCredentials(
-			[]aws_creds.Provider{
-				&aws_ec2_role_creds.EC2RoleProvider{
-					Client:       aws_ec2_meta.New(sess),
-					ExpiryWindow: 0,
-				},
-				&aws_creds.EnvProvider{},
-			},
-		))
+		sess, err = aws_session.NewSessionWithOptions(aws_session.Options{
+			SharedConfigState: aws_session.SharedConfigEnable,
+			Config:            *awsCfg,
+		})
+	} else {
+		sess, err = aws_session.NewSession(awsCfg)
 	}
-	return s3.New(sess, awsCfg)
+	if err != nil {
+		return nil, err
+	}
+	return s3.New(sess), nil
 }
 
 func buildS3Bucket(uStores UserStores, name string, bCfg *S3BucketConfig) (*S3Bucket, error) {
@@ -179,6 +193,7 @@ func buildS3Bucket(uStores UserStores, name string, bCfg *S3BucketConfig) (*S3Bu
 	}, nil
 }
 
+// NewS3BucketFromConfig creates an S3Buckets from configuration
 func NewS3BucketFromConfig(uStores UserStores, cfg *S3SFTPProxyConfig) (*S3Buckets, error) {
 	buckets := map[string]*S3Bucket{}
 	userToBucketMap := map[string]*S3Bucket{}

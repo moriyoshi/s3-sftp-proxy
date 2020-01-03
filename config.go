@@ -21,10 +21,12 @@ var (
 	vTrue                                = true
 )
 
+// URL used in configuration
 type URL struct {
 	*url.URL
 }
 
+// UnmarshalText parses a URL from configuration
 func (u *URL) UnmarshalText(text []byte) (err error) {
 	u.URL, err = url.Parse(string(text))
 	return
@@ -39,11 +41,13 @@ func (d *duration) UnmarshalText(text []byte) (err error) {
 	return err
 }
 
+// AWSCredentialsConfig AWS static credentials configuration
 type AWSCredentialsConfig struct {
 	AWSAccessKeyID     string `toml:"aws_access_key_id"`
 	AWSSecretAccessKey string `toml:"aws_secret_access_key"`
 }
 
+// S3BucketConfig S3 bucket configuration
 type S3BucketConfig struct {
 	Profile                        string                   `toml:"profile"`
 	Credentials                    *AWSCredentialsConfig    `toml:"credentials"`
@@ -65,6 +69,7 @@ type S3BucketConfig struct {
 	KeyboardInteractiveAuthEnabled bool                     `toml:"keyboard_interactive_auth"`
 }
 
+// AuthUser information about user authentication
 type AuthUser struct {
 	Password             string `toml:"password"`
 	AuthenticationMethod string `toml:"authentication_method"`
@@ -72,12 +77,14 @@ type AuthUser struct {
 	PublicKeyFile        string `toml:"public_key_file"`
 }
 
+// AuthConfig authentication configuration
 type AuthConfig struct {
 	Type       string              `toml:"type"`
 	UserDBFile string              `toml:"user_db_file"`
 	Users      map[string]AuthUser `toml:"users"`
 }
 
+// S3SFTPProxyConfig app global configuration
 type S3SFTPProxyConfig struct {
 	Bind                          string                     `toml:"bind"`
 	HostKeyFile                   string                     `toml:"host_key_file"`
@@ -156,6 +163,7 @@ func validateAndFixupAuthConfig(aCfg *AuthConfig) error {
 	}
 }
 
+// ReadConfig reads configuration from string and returns an instance of S3SFTPProxyConfig
 func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 	cfg := &S3SFTPProxyConfig{
 		Buckets:     map[string]*S3BucketConfig{},
@@ -234,6 +242,7 @@ func ReadConfig(tomlStr string) (*S3SFTPProxyConfig, error) {
 	return cfg, err
 }
 
+// ReadConfigFromFile reads configuration from file and returns an instance of S3SFTPProxyConfig
 func ReadConfigFromFile(tomlFile string) (*S3SFTPProxyConfig, error) {
 	tomlStr, err := ioutil.ReadFile(tomlFile)
 	if err != nil {

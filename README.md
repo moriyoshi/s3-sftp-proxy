@@ -345,3 +345,10 @@ Given previous information, the maximum amount of memory used internally for buf
 is full, an error will be raised and the file will not be uploaded. This kind of errors can be easily on metric `sftp_memory_buffer_pool_timeouts`.
 
 As an example, imagine you want to upload a 12MB size file (and we are using the default value for `upload_memory_buffer_size`, which is 5MB) using `sftp` tool. This tool uploads 32KB chunks in parallel, so chunks arrives to the server without order. When first chunk is received on the server, `s3-sftp-proxy` gets a buffer memory from the pool and inserts the data in their place. When the buffer is full (5MB are present on the server), a [CreateMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html) request is performed to S3 and an upload to S3 is enqueued to the workers. One upload worker will take this upload from the queue, upload its content to S3 using an [UploadPart](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html) request, and returned the buffer memory to the pool (releasing it). Meanwhile, more data from the client is received and stored on a different buffer. Finally, when the entire file is uploaded, pending data is uploaded to S3 via UploadPart. Finally, when all data is present on S3, a [CompleteMultipartUpload](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html) request is sent to S3 to finish the upload.
+
+## Known issues
+
+### Cancelled uploads not detected
+
+`sftp` version v0.10.1 does not notify writers or readers on transfer errors, however, current `master` version does. Right now, when
+an upload is cancelled, upload is considered as completed.

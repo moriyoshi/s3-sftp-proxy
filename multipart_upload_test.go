@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	aws_s3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	fake_log "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -117,17 +118,10 @@ func (m *mockedS3) AbortMultipartUploadWithContext(_ aws.Context, _ *aws_s3.Abor
 	return nil, nil
 }
 
-type FakeLog struct{}
-
-func (f FakeLog) Debug(args ...interface{}) {}
-func (f FakeLog) Info(args ...interface{})  {}
-func (f FakeLog) Warn(args ...interface{})  {}
-func (f FakeLog) Error(args ...interface{}) {}
-
 // Tests
 func TestMultipartUploadSinglePart(t *testing.T) {
 	partSize := 50
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -161,7 +155,7 @@ func TestMultipartUploadSinglePart(t *testing.T) {
 
 func TestMultipartUploadPendingPartOnSinglePut(t *testing.T) {
 	partSize := 20
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -195,7 +189,7 @@ func TestMultipartUploadPendingPartOnSinglePut(t *testing.T) {
 
 func TestMultipartUploadErrorPutObject(t *testing.T) {
 	partSize := 20
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -230,7 +224,7 @@ func TestMultipartUploadErrorPutObject(t *testing.T) {
 
 func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -264,7 +258,7 @@ func TestMultipartUploadSinglePartFullUsesMultipart(t *testing.T) {
 
 func TestMultipartUploadFillingPart(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -302,7 +296,7 @@ func TestMultipartUploadFillingPart(t *testing.T) {
 
 func TestMultipartUploadMultiPartNotLockings(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -338,7 +332,7 @@ func TestMultipartUploadMultiPartNotLockings(t *testing.T) {
 
 func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 	partSize := 15
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -372,7 +366,7 @@ func TestMultipartUploadMultiplePartSingleWriteAt(t *testing.T) {
 
 func TestMultipartUploadMultiplePartMultipleWriteAt(t *testing.T) {
 	partSize := 15
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -407,7 +401,7 @@ func TestMultipartUploadMultiplePartMultipleWriteAt(t *testing.T) {
 
 func TestMultipartUploadMultiplePartIgnoredOverlapping(t *testing.T) {
 	partSize := 15
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -443,7 +437,7 @@ func TestMultipartUploadMultiplePartIgnoredOverlapping(t *testing.T) {
 
 func TestMultipartUploadMaxObjectSizeErrorSingleWrite(t *testing.T) {
 	partSize := 15
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -477,7 +471,7 @@ func TestMultipartUploadMaxObjectSizeErrorSingleWrite(t *testing.T) {
 
 func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 	partSize := 7
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -513,7 +507,7 @@ func TestMultipartUploadMaxObjectSizeErrorSeveralWrites(t *testing.T) {
 
 func TestMultipartUploadPendingParts(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -547,7 +541,7 @@ func TestMultipartUploadPendingParts(t *testing.T) {
 
 func TestMultipartUploadErrorCreatingMultipartUploadOnClose(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -582,7 +576,7 @@ func TestMultipartUploadErrorCreatingMultipartUploadOnClose(t *testing.T) {
 
 func TestMultipartUploadErrorCreatingMultipartUploadOnWrite(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -616,7 +610,7 @@ func TestMultipartUploadErrorCreatingMultipartUploadOnWrite(t *testing.T) {
 
 func TestMultipartUploadErrorUploadingPartDetectedOnNextWrite(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -652,7 +646,7 @@ func TestMultipartUploadErrorUploadingPartDetectedOnNextWrite(t *testing.T) {
 
 func TestMultipartUploadPartPending(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -689,7 +683,7 @@ func TestMultipartUploadPartPending(t *testing.T) {
 
 func TestMultipartUploadPoolFull(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{
@@ -723,7 +717,7 @@ func TestMultipartUploadPoolFull(t *testing.T) {
 
 func TestMultipartUploadErrorasdf(t *testing.T) {
 	partSize := 10
-	log := &FakeLog{}
+	log, _ := fake_log.NewNullLogger()
 	w := NewS3UploadWorkers(context.Background(), 1, log)
 	ch := w.Start()
 	m := &mockedS3{

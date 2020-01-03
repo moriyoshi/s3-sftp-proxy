@@ -21,12 +21,14 @@ var (
 	configFile string
 	bind       string
 	debug      bool
+	logFormat  string
 )
 
 func init() {
 	flag.StringVar(&configFile, "config", "s3-sftp-proxy.toml", "configuration file")
 	flag.StringVar(&bind, "bind", "", "listen on addr:port")
 	flag.BoolVar(&debug, "debug", false, "turn on debugging output")
+	flag.StringVar(&logFormat, "log-format", "text", "Log format. Available options are: text (default), or json")
 }
 
 func buildSSHServerConfig(buckets *S3Buckets, cfg *S3SFTPProxyConfig) (*ssh.ServerConfig, error) {
@@ -149,6 +151,14 @@ func main() {
 	logger := logrus.New()
 	if debug {
 		logger.SetLevel(logrus.DebugLevel)
+	}
+	switch logFormat {
+	case "text":
+		logger.SetFormatter(&logrus.TextFormatter{})
+	case "json":
+		logger.SetFormatter(&logrus.JSONFormatter{})
+	default:
+		panic(fmt.Sprintf("Invalid log format %s", logFormat))
 	}
 
 	lsnr, err := net.Listen("tcp", _bind)

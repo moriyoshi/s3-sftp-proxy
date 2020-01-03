@@ -9,15 +9,9 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
-
-type ServerLogger interface {
-	DebugLogger
-	InfoLogger
-	WarnLogger
-	ErrorLogger
-}
 
 type Server struct {
 	*ssh.ServerConfig
@@ -27,13 +21,13 @@ type Server struct {
 	ReaderLookbackBufferSize int
 	ReaderMinChunkSize       int
 	ListerLookbackBufferSize int
-	Log                      ServerLogger
+	Log                      logrus.FieldLogger
 	Now                      func() time.Time
 	UploadChan               chan<- *S3PartToUpload
 }
 
 // NewServer creates a new sftp server
-func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger ServerLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, uploadMemoryBufferPoolSize int, uploadMemoryBufferPoolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
+func NewServer(ctx context.Context, buckets *S3Buckets, serverConfig *ssh.ServerConfig, logger logrus.FieldLogger, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, partSize int, uploadMemoryBufferPoolSize int, uploadMemoryBufferPoolTimeout time.Duration, uploadChan chan<- *S3PartToUpload) *Server {
 	return &Server{
 		S3Buckets:                buckets,
 		ServerConfig:             serverConfig,
@@ -57,7 +51,7 @@ func asHandlers(handlers interface {
 	return sftp.Handlers{handlers, handlers, handlers, handlers}
 }
 
-func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request, userInfo *UserInfo) {
+func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request, userInfo *UserInfo, log logrus.FieldLogger) {
 	defer s.Log.Debug("HandleChannel ended")
 	server := sftp.NewRequestServer(
 		sshCh,
@@ -69,7 +63,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				ReaderMinChunkSize:       s.ReaderMinChunkSize,
 				ListerLookbackBufferSize: s.ListerLookbackBufferSize,
 				UploadMemoryBufferPool:   s.UploadMemoryBufferPool,
-				Log:                      s.Log,
+				Log:                      log,
 				PhantomObjectMap:         s.PhantomObjectMap,
 				Perms:                    bucket.Perms,
 				ServerSideEncryption:     &bucket.ServerSideEncryption,
@@ -86,7 +80,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		defer s.Log.Debug("HandleChannel.discardRequest ended")
+		defer log.Debug("HandleChannel.discardRequest ended")
 		defer wg.Done()
 		defer cancel()
 	outer:
@@ -98,10 +92,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 				if req == nil {
 					break outer
 				}
-				ok := false
-				if req.Type == "subsystem" && string(req.Payload[4:]) == "sftp" {
-					ok = true
-				}
+				ok := req.Type == "subsystem" && string(req.Payload[4:]) == "sftp"
 				req.Reply(ok, nil)
 			}
 		}
@@ -109,7 +100,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 
 	wg.Add(1)
 	go func() {
-		defer s.Log.Debug("HandleChannel.serve ended")
+		defer log.Debug("HandleChannel.serve ended")
 		defer wg.Done()
 		defer cancel()
 		go func() {
@@ -117,7 +108,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 			server.Close()
 		}()
 		if err := server.Serve(); err != io.EOF {
-			s.Log.Error(err.Error())
+			log.WithField("exception", err).Error("Error on server")
 		}
 	}()
 
@@ -125,14 +116,14 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 }
 
 func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
-	defer s.Log.Debug("HandleClient ended")
+	log := s.Log.WithField("remote_addr", conn.RemoteAddr().String())
+	defer log.Debug("HandleClient ended")
 	defer func() {
 		mUsersConnected.Dec()
-		F(s.Log.Info, "connection from client %s closed", conn.RemoteAddr().String())
+		log.Info("Connection from client closed")
 		conn.Close()
 	}()
-
-	F(s.Log.Info, "connected from client %s", conn.RemoteAddr().String())
+	log.Info("Connected from client")
 
 	innerCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -153,10 +144,12 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 		User: sconn.User(),
 	}
 
-	F(s.Log.Info, "user %s logged in", sconn.User())
+	log = log.WithField("user", sconn.User())
+	log.Info("User logged in")
 	mUsersConnected.Inc()
 	bucket, ok := s.UserToBucketMap[sconn.User()]
 	if !ok {
+		log.Error("No bucket designated to user")
 		return fmt.Errorf("unknown error: no bucket designated to user %s found", sconn.User())
 	}
 
@@ -165,8 +158,8 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	wg.Add(1)
 	go func(reqs <-chan *ssh.Request) {
 		defer wg.Done()
-		defer s.Log.Debug("HandleClient.requestHandler ended")
-		for _ = range reqs {
+		defer log.Debug("HandleClient.requestHandler ended")
+		for range reqs {
 		}
 	}(reqs)
 
@@ -174,25 +167,25 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	go func(chans <-chan ssh.NewChannel) {
 		defer wg.Done()
 		defer cancel()
-		defer s.Log.Debug("HandleClient.channelHandler ended")
+		defer log.Debug("HandleClient.channelHandler ended")
 		for newSSHCh := range chans {
 			if newSSHCh.ChannelType() != "session" {
 				newSSHCh.Reject(ssh.UnknownChannelType, "unknown channel type")
-				F(s.Log.Info, "unknown channel type: %s", newSSHCh.ChannelType())
+				log.Warnf("Unknown channel type: %s", newSSHCh.ChannelType())
 				continue
 			}
-			F(s.Log.Info, "channel: %s", newSSHCh.ChannelType())
+			log.Infof("Channel: %s", newSSHCh.ChannelType())
 
 			sshCh, reqs, err := newSSHCh.Accept()
 			if err != nil {
-				F(s.Log.Error, "could not accept channel: %s", err.Error())
+				log.WithField("exception", err).Error("Could not accept channel")
 				break
 			}
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				s.HandleChannel(innerCtx, bucket, sshCh, reqs, userInfo)
+				s.HandleChannel(innerCtx, bucket, sshCh, reqs, userInfo, log)
 			}()
 		}
 	}(chans)

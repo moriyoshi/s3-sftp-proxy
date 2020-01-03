@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/moriyoshi/s3-sftp-proxy/util"
+	"github.com/sirupsen/logrus"
 
 	aws_s3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -64,16 +65,12 @@ func (part *S3PartToUpload) isFull() bool {
 
 // S3MultipartUploadWriter uploads multiple parts to S3 having a writer interface
 type S3MultipartUploadWriter struct {
-	Ctx                  context.Context
-	Bucket               string
-	Key                  Path
-	S3                   s3iface.S3API
-	ServerSideEncryption *ServerSideEncryptionConfig
-	Log                  interface {
-		DebugLogger
-		WarnLogger
-		ErrorLogger
-	}
+	Ctx                    context.Context
+	Bucket                 string
+	Key                    Path
+	S3                     s3iface.S3API
+	ServerSideEncryption   *ServerSideEncryptionConfig
+	Log                    logrus.FieldLogger
 	MaxObjectSize          int64
 	UploadMemoryBufferPool *MemoryBufferPool
 	Info                   *PhantomObjectInfo
@@ -88,9 +85,16 @@ type S3MultipartUploadWriter struct {
 	UploadChan             chan<- *S3PartToUpload
 }
 
+// TransferError receives notifications when a transfer error is raised
+// This notification is only present on `master` branch (2020-01-03), but
+// not on current dependency (v0.10.1)
+func (u *S3MultipartUploadWriter) TransferError(err error) {
+	u.Log.WithField("exception", err).Debug("Transfer error")
+}
+
 // Close closes multipart upload writer
 func (u *S3MultipartUploadWriter) Close() error {
-	F(u.Log.Debug, "S3MultipartUploadWriter.Close")
+	u.Log.Debug("S3MultipartUploadWriter.Close")
 
 	u.PhantomObjectMap.RemoveByInfoPtr(u.Info)
 
@@ -141,6 +145,7 @@ func (u *S3MultipartUploadWriter) Close() error {
 	}
 
 	if err != nil {
+		u.Log.WithField("exception", err).Debug("Error closing upload")
 		u.s3AbortMultipartUpload()
 		u.closePartsInStateAdding()
 		mOperationStatus.With(prometheus.Labels{"method": u.RequestMethod, "status": "failure"}).Inc()
@@ -168,7 +173,7 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 	}
 
 	if err != nil {
-		F(u.Log.Debug, "Error on WriteAt: %s", err.Error())
+		u.Log.WithField("exception", err).Error("Error on WriteAt")
 		u.s3AbortMultipartUpload()
 		u.closePartsInStateAdding()
 		u.err = err
@@ -178,8 +183,7 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 	}
 
 	partNumberFinal := int((off + pending - 1) / partSize)
-
-	F(u.Log.Debug, "len(buf)=%d, off=%d, partNumberInitial=%d, partOffsetInitial=%d", len(buf), off, partNumberInitial, partOffsetInitial)
+	u.Log.Debugf("WriteAt len(buf)=%d, off=%d, partNumberInitial=%d, partOffsetInitial=%d", len(buf), off, partNumberInitial, partOffsetInitial)
 	u.Info.SetSizeIfGreater(offFinal)
 	if len(u.parts) <= partNumberFinal {
 		newParts := make([]*S3PartToUpload, partNumberFinal+1)
@@ -194,10 +198,10 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 		u.mtx.Lock()
 		part := u.parts[partNumber]
 		if part == nil {
-			F(u.Log.Debug, "Getting space from partition pool for part number: %d", partNumber)
+			u.Log.Debug("Getting memory buffer from pool")
 			buf, err := u.UploadMemoryBufferPool.Get()
 			if err != nil {
-				F(u.Log.Debug, "Error getting a partition pool: %s", err.Error())
+				u.Log.WithField("exception", err).Error("Error getting a memory buffer from pool")
 				u.s3AbortMultipartUpload()
 				u.closePartsInStateAdding()
 				u.err = err
@@ -231,7 +235,6 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 				if err != nil {
 					part.mtx.Unlock()
 					u.mtx.Lock()
-					F(u.Log.Debug, "Error enqueuing a part upload: %s", err.Error())
 					u.s3AbortMultipartUpload()
 					u.closePartsInStateAdding()
 					u.err = err
@@ -241,7 +244,7 @@ func (u *S3MultipartUploadWriter) WriteAt(buf []byte, off int64) (int, error) {
 				}
 			}
 		} else {
-			F(u.Log.Debug, "Trying to add more data to a part already full")
+			u.Log.WithField("partnumber", partNumber).Warn("Trying to add more data to an already full part")
 		}
 		part.mtx.Unlock()
 		partNumber++
@@ -264,11 +267,16 @@ func (u *S3MultipartUploadWriter) enqueueUpload(part *S3PartToUpload) error {
 		}
 		u.mtx.Unlock()
 
-		F(u.Log.Debug, "Enqueuing part %d to be uploaded", part.partNumber)
+		log := u.Log.WithFields(logrus.Fields{
+			"uploadid":   *u.multiPartUploadID,
+			"partnumber": part.partNumber,
+		})
+		log.Debugf("Enqueuing part to be uploaded")
 		part.state = S3PartUploadStateFull
 		u.uploadGroup.Add(1)
 		select {
 		case <-u.Ctx.Done():
+			log.Debug("Enqueue upload cancelled")
 			return fmt.Errorf("Enqueue upload cancelled")
 		case u.UploadChan <- part:
 		}
@@ -299,7 +307,7 @@ func (u *S3MultipartUploadWriter) closePartsInStateAdding() int {
 func (u *S3MultipartUploadWriter) s3CreateMultipartUpload() error {
 	key := u.Info.GetOne().Key.String()
 	sse := u.ServerSideEncryption
-	F(u.Log.Debug, "CreateMultipartUpload(Bucket=%s, Key=%s, Sse=%v)", u.Bucket, key, sse)
+	u.Log.Debugf("CreateMultipartUpload(sse=%v)", sse)
 
 	params := &aws_s3.CreateMultipartUploadInput{
 		ACL:                  &aclPrivate,
@@ -314,11 +322,10 @@ func (u *S3MultipartUploadWriter) s3CreateMultipartUpload() error {
 
 	resp, err := u.S3.CreateMultipartUploadWithContext(u.Ctx, params)
 	if err != nil {
-		u.Log.Debug("=> ", err)
-		F(u.Log.Error, "failed to create multipart upload: %s", err.Error())
+		u.Log.WithField("exception", err).Error("Error creating multipart upload")
 		return err
 	}
-	F(u.Log.Debug, "=> OK, uploadId=%s", *resp.UploadId)
+	u.Log.WithField("uploadid", *resp.UploadId).Debug("Multipart upload created correctly")
 	u.multiPartUploadID = resp.UploadId
 	return nil
 }
@@ -326,7 +333,7 @@ func (u *S3MultipartUploadWriter) s3CreateMultipartUpload() error {
 func (u *S3MultipartUploadWriter) s3PutObject(content []byte) error {
 	key := u.Info.GetOne().Key.String()
 	sse := u.ServerSideEncryption
-	F(u.Log.Debug, "PutObject(Bucket=%s, Key=%s, Sse=%v)", u.Bucket, key, sse)
+	u.Log.Debugf("PutObject(sse=%v)", sse)
 
 	params := &aws_s3.PutObjectInput{
 		ACL:                  &aclPrivate,
@@ -340,12 +347,9 @@ func (u *S3MultipartUploadWriter) s3PutObject(content []byte) error {
 		SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyId),
 	}
 	if _, err := u.S3.PutObjectWithContext(u.Ctx, params); err != nil {
-		u.Log.Debug("=> ", err)
-		F(u.Log.Error, "failed to put object: %s", err.Error())
+		u.Log.WithField("exception", err).Error("Error putting object")
 		return err
 	}
-	u.Log.Debug("=> OK")
-
 	return nil
 }
 
@@ -353,7 +357,8 @@ func (u *S3MultipartUploadWriter) s3AbortMultipartUpload() error {
 	if u.multiPartUploadID != nil {
 		key := u.Info.GetOne().Key.String()
 		sse := u.ServerSideEncryption
-		F(u.Log.Debug, "AbortMultipartUpload(Bucket=%s, Key=%s, Sse=%v)", u.Bucket, key, sse)
+		log := u.Log.WithField("uploadid", *u.multiPartUploadID)
+		log.Debugf("AbortMultipartUpload(sse=%v)", sse)
 
 		params := &aws_s3.AbortMultipartUploadInput{
 			Bucket:   &u.Bucket,
@@ -362,11 +367,9 @@ func (u *S3MultipartUploadWriter) s3AbortMultipartUpload() error {
 		}
 		u.multiPartUploadID = nil
 		if _, err := u.S3.AbortMultipartUploadWithContext(u.Ctx, params); err != nil {
-			u.Log.Debug("=> ", err)
-			F(u.Log.Error, "failed to abort multipart upload: %s", err.Error())
+			log.WithField("exception", err).Error("Error aborting multipart upload")
 			return err
 		}
-		u.Log.Debug("=> OK")
 	}
 
 	return nil
@@ -375,7 +378,8 @@ func (u *S3MultipartUploadWriter) s3AbortMultipartUpload() error {
 func (u *S3MultipartUploadWriter) s3CompleteMultipartUpload() error {
 	key := u.Info.GetOne().Key.String()
 	sse := u.ServerSideEncryption
-	F(u.Log.Debug, "CompleteMultipartUpload(Bucket=%s, Key=%s, Sse=%v)", u.Bucket, key, sse)
+	log := u.Log.WithField("uploadid", *u.multiPartUploadID)
+	log.Debugf("CompleteMultipartUpload(sse=%v)", sse)
 
 	params := &aws_s3.CompleteMultipartUploadInput{
 		Bucket:          &u.Bucket,
@@ -384,18 +388,20 @@ func (u *S3MultipartUploadWriter) s3CompleteMultipartUpload() error {
 		MultipartUpload: &aws_s3.CompletedMultipartUpload{Parts: u.completedParts},
 	}
 	if _, err := u.S3.CompleteMultipartUploadWithContext(u.Ctx, params); err != nil {
-		u.Log.Debug("=> ", err)
-		F(u.Log.Error, "failed to complete multipart upload: %s", err.Error())
+		log.WithField("exception", err).Error("Error completing multipart upload")
 		return err
 	}
-	u.Log.Debug("=> OK")
 	return nil
 }
 
 func (u *S3MultipartUploadWriter) s3UploadPart(part *S3PartToUpload) error {
 	key := u.Info.GetOne().Key.String()
 	sse := u.ServerSideEncryption
-	F(u.Log.Debug, "UploadPart(Bucket=%s, Key=%s, Sse=%v, uploadId=%s, part=%d)", u.Bucket, key, sse, *u.multiPartUploadID, part.partNumber)
+	log := u.Log.WithFields(logrus.Fields{
+		"uploadid":   *u.multiPartUploadID,
+		"partnumber": part.partNumber,
+	})
+	log.Debugf("UploadPart(sse=%v)", sse)
 
 	var content []byte
 	var err error
@@ -419,8 +425,7 @@ func (u *S3MultipartUploadWriter) s3UploadPart(part *S3PartToUpload) error {
 	resp, err := u.S3.UploadPartWithContext(u.Ctx, params)
 
 	if err != nil {
-		u.Log.Debug("=> ", err)
-		F(u.Log.Error, "failed to upload part: %s", err.Error())
+		log.WithField("exception", err).Error("Error uploading part to S3")
 		return err
 	}
 
@@ -446,13 +451,13 @@ func (u *S3MultipartUploadWriter) seterr(e error) {
 type S3UploadWorkers struct {
 	ctx     context.Context
 	workers int
-	log     DebugLogger
+	log     logrus.FieldLogger
 	wg      sync.WaitGroup
 }
 
 // NewS3UploadWorkers creates new upload workers to take pending part uploads from a channel and
 // upload them to S3
-func NewS3UploadWorkers(ctx context.Context, workers int, log DebugLogger) *S3UploadWorkers {
+func NewS3UploadWorkers(ctx context.Context, workers int, log logrus.FieldLogger) *S3UploadWorkers {
 	return &S3UploadWorkers{
 		ctx:     ctx,
 		workers: workers,
@@ -469,18 +474,18 @@ func (w *S3UploadWorkers) Start() chan<- *S3PartToUpload {
 		go func(wn int) {
 			defer w.wg.Done()
 
-			F(w.log.Debug, "S3 upload worker %d waiting for upload jobs", wn)
+			log := w.log.WithField("worker", fmt.Sprintf("s3-upload-worker-%d", wn))
+			log.Debug("Waiting for upload jobs")
 			for {
 				select {
 				case <-w.ctx.Done():
-					F(w.log.Debug, "S3 upload worker %d ended", wn)
+					log.Debug("Worker ended")
 					return
 				case part, ok := <-uploadChan:
 					if !ok {
-						F(w.log.Debug, "S3 upload worker %d => closed channel", wn)
+						log.Debug("Upload channel closed")
 						return
 					}
-					F(w.log.Debug, "S3 upload worker %d => uploading part %d", wn, part.partNumber)
 					w.uploadPart(part)
 				}
 			}
@@ -503,7 +508,10 @@ func (w *S3UploadWorkers) uploadPart(part *S3PartToUpload) {
 	defer u.uploadGroup.Done()
 
 	if part.state != S3PartUploadStateFull {
-		F(w.log.Debug, "Part to upload state invalid.")
+		u.Log.WithFields(logrus.Fields{
+			"uploadid":   *u.multiPartUploadID,
+			"partnumber": part.partNumber,
+		}).Warnf("Invalid state: %d", part.state)
 		return
 	}
 

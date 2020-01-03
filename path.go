@@ -2,6 +2,7 @@ package main
 
 import "strings"
 
+// Path represents a fs path
 type Path []string
 
 func splitIntoPathInner(p Path, path string, state int) Path {
@@ -34,6 +35,7 @@ func splitIntoPathInner(p Path, path string, state int) Path {
 	return p
 }
 
+// SplitIntoPathAsAbs splits a path and returns a path object in abs
 func SplitIntoPathAsAbs(path string) Path {
 	if path == "" {
 		return Path{}
@@ -41,6 +43,7 @@ func SplitIntoPathAsAbs(path string) Path {
 	return splitIntoPathInner(Path{""}, path, 0)
 }
 
+// SplitIntoPath splits a path and returns a path object
 func SplitIntoPath(path string) Path {
 	if path == "" {
 		return Path{}
@@ -48,6 +51,7 @@ func SplitIntoPath(path string) Path {
 	return splitIntoPathInner(Path{}, path, 1)
 }
 
+// Canonicalize returns the canonicalized path
 func (p Path) Canonicalize() Path {
 	retval := make(Path, 0, len(p))
 	for _, c := range p {
@@ -65,30 +69,35 @@ func (p Path) Canonicalize() Path {
 	return retval
 }
 
+// IsEmpty returns true if current path is empty
 func (p Path) IsEmpty() bool {
 	return len(p) == 0
 }
 
+// IsRoot returns true if current path is root
 func (p Path) IsRoot() bool {
 	return len(p) == 1 && p[0] == ""
 }
 
+// IsAbs returns true if current path is in abs mode
 func (p Path) IsAbs() bool {
 	return len(p) > 0 && p[0] == ""
 }
 
+// Join joins current path with another (passed as parameter) and returns a new path
 func (p Path) Join(another Path) Path {
 	if len(another) > 0 && another[0] == "" {
 		return append(p, another[1:]...)
-	} else {
-		return append(p, another...)
 	}
+	return append(p, another...)
 }
 
+// String converts a path into a string
 func (p Path) String() string {
 	return strings.Join(p, "/")
 }
 
+// IsPrefixed returns true if current path is prefixed by another one (passed as parameter)
 func (p Path) IsPrefixed(another Path) bool {
 	if len(p) < len(another) {
 		return false
@@ -101,48 +110,49 @@ func (p Path) IsPrefixed(another Path) bool {
 	return true
 }
 
+// Prefix returns the prefix of current path
 func (p Path) Prefix() Path {
 	if len(p) == 0 {
 		return p
-	} else if len(p) == 1 {
+	}
+	if len(p) == 1 {
 		if p[0] == "" {
 			return Path{""}
-		} else {
-			return Path{}
 		}
-	} else {
-		return p[:len(p)-1]
+		return Path{}
 	}
+	return p[:len(p)-1]
 }
 
+// BasePart returns the base part of current path
 func (p Path) BasePart() Path {
 	if len(p) == 0 {
 		return p
-	} else if len(p) == 1 {
+	}
+	if len(p) == 1 {
 		if p[0] == "" {
 			return Path{""}
-		} else {
-			return Path{}
 		}
-	} else {
-		return p[len(p)-1:]
+		return Path{}
 	}
+	return p[len(p)-1:]
 }
 
+// Base returns the base of current path as string
 func (p Path) Base() string {
 	if len(p) == 0 {
 		return ""
-	} else if len(p) == 1 {
+	}
+	if len(p) == 1 {
 		if p[0] == "" {
 			return "/"
-		} else {
-			return ""
 		}
-	} else {
-		return p[len(p)-1]
+		return ""
 	}
+	return p[len(p)-1]
 }
 
+// Equal returns true if current path and another one (passed as parameter) are equal
 func (p Path) Equal(p2 Path) bool {
 	if len(p) != len(p2) {
 		return false

@@ -18,10 +18,12 @@ import (
 
 var aclPrivate = "private"
 
+// ReadDeadlineSettable interafce to set a read deadline
 type ReadDeadlineSettable interface {
 	SetReadDeadline(t time.Time) error
 }
 
+// WriteDeadlineSettable interafce to set a write deadline
 type WriteDeadlineSettable interface {
 	SetWriteDeadline(t time.Time) error
 }
@@ -37,6 +39,7 @@ func nilIfEmpty(s string) *string {
 	return &s
 }
 
+// S3GetObjectOutputReader used to implement a reader when a file is downloaded from S3 and sent to the client
 type S3GetObjectOutputReader struct {
 	Ctx          context.Context
 	Goo          *aws_s3.GetObjectOutput
@@ -49,6 +52,7 @@ type S3GetObjectOutputReader struct {
 	noMore       bool
 }
 
+// Close closes current output reader
 func (oor *S3GetObjectOutputReader) Close() error {
 	if oor.Goo.Body != nil {
 		oor.Log.Debug("Closing download")
@@ -58,6 +62,7 @@ func (oor *S3GetObjectOutputReader) Close() error {
 	return nil
 }
 
+// ReadAt reads data present on offset in S3 object and inserts on buffer passed as parameter
 func (oor *S3GetObjectOutputReader) ReadAt(buf []byte, off int64) (int, error) {
 	oor.mtx.Lock()
 	defer oor.mtx.Unlock()
@@ -153,6 +158,7 @@ func (oor *S3GetObjectOutputReader) ReadAt(buf []byte, off int64) (int, error) {
 	}
 }
 
+// ObjectFileInfo represents an S3 object file information
 type ObjectFileInfo struct {
 	_Name         string
 	_LastModified time.Time
@@ -160,30 +166,37 @@ type ObjectFileInfo struct {
 	_Mode         os.FileMode
 }
 
+// Name returns the name of the object file information
 func (ofi *ObjectFileInfo) Name() string {
 	return ofi._Name
 }
 
+// ModTime returns the modification time of the object file information
 func (ofi *ObjectFileInfo) ModTime() time.Time {
 	return ofi._LastModified
 }
 
+// Size returns the size of the object file information
 func (ofi *ObjectFileInfo) Size() int64 {
 	return ofi._Size
 }
 
+// Mode returns the mode of the object file information
 func (ofi *ObjectFileInfo) Mode() os.FileMode {
 	return ofi._Mode
 }
 
+// IsDir returns true if current object file is a directory
 func (ofi *ObjectFileInfo) IsDir() bool {
 	return (ofi._Mode & os.ModeDir) != 0
 }
 
+// Sys creates a fake file information using the underlying OS call
 func (ofi *ObjectFileInfo) Sys() interface{} {
 	return BuildFakeFileInfoSys()
 }
 
+// S3ObjectLister used to list objects present on S3
 type S3ObjectLister struct {
 	Log              logrus.FieldLogger
 	Ctx              context.Context
@@ -238,6 +251,7 @@ func aclToMode(owner *aws_s3.Owner, grants []*aws_s3.Grant) os.FileMode {
 	return v
 }
 
+// ListAt lists files present on object lister's path and inserts on result array passed as parameter
 func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 	lSuccess := prometheus.Labels{"method": "Ls", "status": "success"}
 	lFailure := prometheus.Labels{"method": "Ls", "status": "failure"}
@@ -272,9 +286,8 @@ func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 		if i == 0 {
 			mOperationStatus.With(lSuccess).Inc()
 			return 0, io.EOF
-		} else {
-			return i, nil
 		}
+		return i, nil
 	}
 
 	if s <= len(sol.spooled) && s >= sol.Lookback {
@@ -376,6 +389,7 @@ func (sol *S3ObjectLister) ListAt(result []os.FileInfo, o int64) (int, error) {
 	return i + n, err
 }
 
+// S3ObjectStat used to obtain stat information from an S3 object
 type S3ObjectStat struct {
 	Log              logrus.FieldLogger
 	Ctx              context.Context
@@ -386,6 +400,7 @@ type S3ObjectStat struct {
 	PhantomObjectMap *PhantomObjectMap
 }
 
+// ListAt obtains stat information from S3 object and inserts on result array passed as parameter
 func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
 	sos.Log.Debugf("S3ObjectStat.ListAt: len(result)=%d offset=%d", len(result), o)
 	lFailure := prometheus.Labels{"method": "Stat", "status": "failure"}
@@ -484,6 +499,7 @@ func (sos *S3ObjectStat) ListAt(result []os.FileInfo, o int64) (int, error) {
 	return 1, nil
 }
 
+// S3BucketIO represents IO operations over an S3 bucket
 type S3BucketIO struct {
 	Ctx                      context.Context
 	Bucket                   *S3Bucket
@@ -504,6 +520,7 @@ func buildKey(s3b *S3Bucket, path string) Path {
 	return s3b.KeyPrefix.Join(SplitIntoPath(path))
 }
 
+// Fileread downloads an S3 object and sends it to the client in streaming (using S3GetObjectOutputReader)
 func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 	lSuccess := prometheus.Labels{"method": req.Method, "status": "success"}
 	lFailure := prometheus.Labels{"method": req.Method, "status": "failure"}
@@ -561,6 +578,7 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 	return oor, nil
 }
 
+// Filewrite uploads a file to S3 (using S3MultipartUploadWriter)
 func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 	lFailure := prometheus.Labels{"method": req.Method, "status": "failure"}
 	if !s3io.Perms.Writable {
@@ -609,6 +627,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 	return oow, nil
 }
 
+// Filecmd executes a file command
 func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 	log := s3io.Log.WithField("method", req.Method)
 
@@ -656,7 +675,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 				SSECustomerAlgorithm: nilIfEmpty(sse.CustomerAlgorithm()),
 				SSECustomerKey:       nilIfEmpty(sse.CustomerKey),
 				SSECustomerKeyMD5:    nilIfEmpty(sse.CustomerKeyMD5),
-				SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyId),
+				SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyID),
 			},
 		)
 		if err != nil {
@@ -786,6 +805,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 	return nil
 }
 
+// Filelist executes a list operation
 func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 	log := s3io.Log.WithField("method", req.Method)
 	lPermErr := prometheus.Labels{"method": req.Method}

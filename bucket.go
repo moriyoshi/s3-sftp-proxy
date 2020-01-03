@@ -49,7 +49,7 @@ type ServerSideEncryptionConfig struct {
 	Type           ServerSideEncryptionType
 	CustomerKey    string
 	CustomerKeyMD5 string
-	KMSKeyId       string
+	KMSKeyID       string
 }
 
 // CustomerAlgorithm customer algorithm server side encryption configuration
@@ -187,7 +187,7 @@ func buildS3Bucket(uStores UserStores, name string, bCfg *S3BucketConfig) (*S3Bu
 			Type:           bCfg.ServerSideEncryption,
 			CustomerKey:    string(customerKey),
 			CustomerKeyMD5: customerKeyMD5,
-			KMSKeyId:       bCfg.SSEKMSKeyId,
+			KMSKeyID:       bCfg.SSEKMSKeyID,
 		},
 		KeyboardInteractiveAuthEnabled: bCfg.KeyboardInteractiveAuthEnabled,
 	}, nil

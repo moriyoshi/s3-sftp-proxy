@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// PhantomObjectInfo phantom object information
 type PhantomObjectInfo struct {
 	Key          Path
 	LastModified time.Time
@@ -12,6 +13,7 @@ type PhantomObjectInfo struct {
 	Mtx          sync.Mutex
 }
 
+// GetOne returns a copy of current panthom object info
 func (info *PhantomObjectInfo) GetOne() PhantomObjectInfo {
 	info.Mtx.Lock()
 	defer info.Mtx.Unlock()
@@ -24,12 +26,14 @@ func (info *PhantomObjectInfo) setKey(v Path) {
 	info.Key = v
 }
 
+// SetLastModified sets last modified information for current phantom object information
 func (info *PhantomObjectInfo) SetLastModified(v time.Time) {
 	info.Mtx.Lock()
 	defer info.Mtx.Unlock()
 	info.LastModified = v
 }
 
+// SetSizeIfGreater sets the size of current phantom object information if it's greater than current one
 func (info *PhantomObjectInfo) SetSizeIfGreater(v int64) {
 	info.Mtx.Lock()
 	defer info.Mtx.Unlock()
@@ -40,6 +44,7 @@ func (info *PhantomObjectInfo) SetSizeIfGreater(v int64) {
 
 type phantomObjectInfoMap map[string]*PhantomObjectInfo
 
+// PhantomObjectMap map of phantom objects
 type PhantomObjectMap struct {
 	perPrefixObjects map[string]phantomObjectInfoMap
 	ptrToPOIMMapMap  map[*PhantomObjectInfo]phantomObjectInfoMap
@@ -62,6 +67,7 @@ func (pom *PhantomObjectMap) add(info *PhantomObjectInfo) bool {
 	return prevInfo == nil
 }
 
+// Add adds a phantom object information to current map based on his path
 func (pom *PhantomObjectMap) Add(info *PhantomObjectInfo) bool {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
@@ -86,6 +92,7 @@ func (pom *PhantomObjectMap) remove(key Path) *PhantomObjectInfo {
 	return info
 }
 
+// Remove removes a phantom object information from current map using his path
 func (pom *PhantomObjectMap) Remove(key Path) *PhantomObjectInfo {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
@@ -105,6 +112,7 @@ func (pom *PhantomObjectMap) removeByInfoPtr(info *PhantomObjectInfo) bool {
 	return true
 }
 
+// RemoveByInfoPtr removes a phantom object information from current map using his information pointer
 func (pom *PhantomObjectMap) RemoveByInfoPtr(info *PhantomObjectInfo) bool {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
@@ -121,6 +129,7 @@ func (pom *PhantomObjectMap) rename(old, new Path) bool {
 	return true
 }
 
+// Rename renames a phantom object information present on current map
 func (pom *PhantomObjectMap) Rename(old, new Path) bool {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
@@ -135,12 +144,14 @@ func (pom *PhantomObjectMap) get(p Path) *PhantomObjectInfo {
 	return m[p.Base()]
 }
 
+// Get gets a phantom object information from current map
 func (pom *PhantomObjectMap) Get(p Path) *PhantomObjectInfo {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
 	return pom.get(p)
 }
 
+// List lists all phantom object information present on a path
 func (pom *PhantomObjectMap) List(p Path) []*PhantomObjectInfo {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
@@ -153,6 +164,7 @@ func (pom *PhantomObjectMap) List(p Path) []*PhantomObjectInfo {
 	return retval
 }
 
+// Size returns the size of current map
 func (pom *PhantomObjectMap) Size() int {
 	pom.mtx.Lock()
 	defer pom.mtx.Unlock()
@@ -160,6 +172,7 @@ func (pom *PhantomObjectMap) Size() int {
 	return len(pom.ptrToPOIMMapMap)
 }
 
+// NewPhantomObjectMap creates a new phantom object map
 func NewPhantomObjectMap() *PhantomObjectMap {
 	return &PhantomObjectMap{
 		perPrefixObjects: map[string]phantomObjectInfoMap{},

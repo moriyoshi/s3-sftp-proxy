@@ -57,7 +57,7 @@ type S3BucketConfig struct {
 	S3ForcePathStyle               *bool                    `toml:"s3_force_path_style"`
 	Bucket                         string                   `toml:"bucket"`
 	KeyPrefix                      string                   `toml:"key_prefix"`
-	BucketUrl                      *URL                     `toml:"bucket_url"`
+	BucketURL                      *URL                     `toml:"bucket_url"`
 	Auth                           string                   `toml:"auth"`
 	MaxObjectSize                  *int64                   `toml:"max_object_size"`
 	Readable                       *bool                    `toml:"readable"`
@@ -65,7 +65,7 @@ type S3BucketConfig struct {
 	Listable                       *bool                    `toml:"listable"`
 	ServerSideEncryption           ServerSideEncryptionType `toml:"server_side_encryption"`
 	SSECustomerKey                 string                   `toml:"sse_customer_key"`
-	SSEKMSKeyId                    string                   `toml:"sse_kms_key_id"`
+	SSEKMSKeyID                    string                   `toml:"sse_kms_key_id"`
 	KeyboardInteractiveAuthEnabled bool                     `toml:"keyboard_interactive_auth"`
 }
 
@@ -108,21 +108,21 @@ func validateAndFixupBucketConfig(bCfg *S3BucketConfig) error {
 			return fmt.Errorf("no credentials may be specified if profile is given")
 		}
 	}
-	if bCfg.BucketUrl != nil {
+	if bCfg.BucketURL != nil {
 		if bCfg.Bucket != "" {
 			return fmt.Errorf("bucket may not be specified if bucket_url is given")
 		}
 		if bCfg.KeyPrefix != "" {
 			return fmt.Errorf("root path may not be specified if bucket_url is given")
 		}
-		if bCfg.BucketUrl.Host == "" {
+		if bCfg.BucketURL.Host == "" {
 			return fmt.Errorf("bucket name is empty")
 		}
-		if bCfg.BucketUrl.Scheme != "s3" {
+		if bCfg.BucketURL.Scheme != "s3" {
 			return fmt.Errorf("bucket URL scheme must be \"s3\"")
 		}
-		bCfg.Bucket = bCfg.BucketUrl.Host
-		bCfg.KeyPrefix = bCfg.BucketUrl.Path
+		bCfg.Bucket = bCfg.BucketURL.Host
+		bCfg.KeyPrefix = bCfg.BucketURL.Path
 	} else {
 		if bCfg.Bucket == "" {
 			return fmt.Errorf("bucket name is empty")

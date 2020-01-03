@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// Server SFTP server struct
 type Server struct {
 	*ssh.ServerConfig
 	*S3Buckets
@@ -48,9 +49,10 @@ func asHandlers(handlers interface {
 	sftp.FileCmder
 	sftp.FileLister
 }) sftp.Handlers {
-	return sftp.Handlers{handlers, handlers, handlers, handlers}
+	return sftp.Handlers{FileGet: handlers, FilePut: handlers, FileCmd: handlers, FileList: handlers}
 }
 
+// HandleChannel handles an sftp channel
 func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.Channel, reqs <-chan *ssh.Request, userInfo *UserInfo, log logrus.FieldLogger) {
 	defer s.Log.Debug("HandleChannel ended")
 	server := sftp.NewRequestServer(
@@ -115,6 +117,7 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 	wg.Wait()
 }
 
+// HandleClient handles a client connection
 func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	log := s.Log.WithField("remote_addr", conn.RemoteAddr().String())
 	defer log.Debug("HandleClient ended")
@@ -194,6 +197,7 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	return nil
 }
 
+// RunListenerEventLoop runs the listener event loop, which waits for incoming TCP connections
 func (s *Server) RunListenerEventLoop(ctx context.Context, lsnr *net.TCPListener) error {
 	defer s.Log.Debug("RunListenerEventLoop ended")
 

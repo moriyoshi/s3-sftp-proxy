@@ -317,7 +317,7 @@ func (u *S3MultipartUploadWriter) s3CreateMultipartUpload() error {
 		SSECustomerAlgorithm: nilIfEmpty(sse.CustomerAlgorithm()),
 		SSECustomerKey:       nilIfEmpty(sse.CustomerKey),
 		SSECustomerKeyMD5:    nilIfEmpty(sse.CustomerKeyMD5),
-		SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyId),
+		SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyID),
 	}
 
 	resp, err := u.S3.CreateMultipartUploadWithContext(u.Ctx, params)
@@ -344,7 +344,7 @@ func (u *S3MultipartUploadWriter) s3PutObject(content []byte) error {
 		SSECustomerAlgorithm: nilIfEmpty(sse.CustomerAlgorithm()),
 		SSECustomerKey:       nilIfEmpty(sse.CustomerKey),
 		SSECustomerKeyMD5:    nilIfEmpty(sse.CustomerKeyMD5),
-		SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyId),
+		SSEKMSKeyId:          nilIfEmpty(sse.KMSKeyID),
 	}
 	if _, err := u.S3.PutObjectWithContext(u.Ctx, params); err != nil {
 		u.Log.WithField("exception", err).Error("Error putting object")

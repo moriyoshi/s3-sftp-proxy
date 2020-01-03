@@ -25,7 +25,12 @@ public_keys = """
 """
 
 [auth.test.users.user02]
-password = "test"
+password = "$2a$04$IdGko3VpUeqY/HEFv5olLOa/E.dswOKxSEivXDSYnvXLWRQyJSFOi" # test
+authentication_method = "bcrypt"
 public_keys = """
 ...
 """
+
+[auth.test.users.user03]
+password = "test"
+chroot = "users/user03"

@@ -300,6 +300,10 @@ user2 = { authentication_method="bcrypt", password="$2a$04$IdGko3VpUeqY/HEFv5olL
 
     Specifies the public keys authorized to use in authentication.  Multiple keys can be specified by delimiting them by newlines.
 
+* `root_path` (optional)
+
+		Specifies the root path of current user. This parameter implements the [chroot](https://en.wikipedia.org/wiki/Chroot) feature.
+
 ### Prometheus metrics
 
 * `sftp_operation_status` _(counter)_
@@ -329,6 +333,14 @@ user2 = { authentication_method="bcrypt", password="$2a$04$IdGko3VpUeqY/HEFv5olL
 * `sftp_memory_buffer_pool_timeouts` _(gauge)_
 
     Number of timeouts produced in the pool when a memory buffer was requested.
+
+* `sftp_reads_bytes_total` _(counter)_
+
+    Number of bytes read from the server.
+
+* `sftp_writes_bytes_total` _(counter)_
+
+    Number of bytes written to the server.
 
 ## Internals
 

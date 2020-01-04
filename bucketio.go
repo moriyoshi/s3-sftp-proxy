@@ -514,10 +514,32 @@ type S3BucketIO struct {
 	Log                      logrus.FieldLogger
 	UserInfo                 *UserInfo
 	UploadChan               chan<- *S3PartToUpload
+	keyPrefix                Path
 }
 
-func buildKey(s3b *S3Bucket, path string) Path {
-	return s3b.KeyPrefix.Join(SplitIntoPath(path))
+// NewS3BucketIO creates a new instance of S3BucketIO
+func NewS3BucketIO(ctx context.Context, bucket *S3Bucket, readerLookbackBufferSize int, readerMinChunkSize int, listerLookbackBufferSize int, uploadMemoryBufferPool *MemoryBufferPool, log logrus.FieldLogger, phantomObjectMap *PhantomObjectMap, now func() time.Time, userInfo *UserInfo, uploadChan chan<- *S3PartToUpload) *S3BucketIO {
+	keyPrefix := bucket.KeyPrefix.Join(SplitIntoPath(userInfo.RootPath))
+	return &S3BucketIO{
+		Ctx:                      ctx,
+		Bucket:                   bucket,
+		ReaderLookbackBufferSize: readerLookbackBufferSize,
+		ReaderMinChunkSize:       readerMinChunkSize,
+		ListerLookbackBufferSize: listerLookbackBufferSize,
+		UploadMemoryBufferPool:   uploadMemoryBufferPool,
+		Log:                      log,
+		PhantomObjectMap:         phantomObjectMap,
+		Perms:                    bucket.Perms,
+		ServerSideEncryption:     &bucket.ServerSideEncryption,
+		Now:                      now,
+		UserInfo:                 userInfo,
+		UploadChan:               uploadChan,
+		keyPrefix:                keyPrefix,
+	}
+}
+
+func (s3io *S3BucketIO) buildKey(path string) Path {
+	return s3io.keyPrefix.Join(SplitIntoPath(path))
 }
 
 // Fileread downloads an S3 object and sends it to the client in streaming (using S3GetObjectOutputReader)
@@ -535,7 +557,7 @@ func (s3io *S3BucketIO) Fileread(req *sftp.Request) (io.ReaderAt, error) {
 		mAWSSessionError.Inc()
 		return nil, err
 	}
-	key := buildKey(s3io.Bucket, req.Filepath)
+	key := s3io.buildKey(req.Filepath)
 
 	phInfo := s3io.PhantomObjectMap.Get(key)
 	if phInfo != nil {
@@ -596,7 +618,7 @@ func (s3io *S3BucketIO) Filewrite(req *sftp.Request) (io.WriterAt, error) {
 	if maxObjectSize < 0 {
 		maxObjectSize = int64(^uint(0) >> 1)
 	}
-	key := buildKey(s3io.Bucket, req.Filepath)
+	key := s3io.buildKey(req.Filepath)
 	info := &PhantomObjectInfo{
 		Key:          key,
 		Size:         0,
@@ -641,8 +663,8 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			log.Error("Operation not allowed as per configuration")
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
-		src := buildKey(s3io.Bucket, req.Filepath)
-		dest := buildKey(s3io.Bucket, req.Target)
+		src := s3io.buildKey(req.Filepath)
+		dest := s3io.buildKey(req.Target)
 		if s3io.PhantomObjectMap.Rename(src, dest) {
 			mOperationStatus.With(lIgnored).Inc()
 			return nil
@@ -703,7 +725,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			log.Error("Operation not allowed as per configuration")
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
-		key := buildKey(s3io.Bucket, req.Filepath)
+		key := s3io.buildKey(req.Filepath)
 		if s3io.PhantomObjectMap.Remove(key) != nil {
 			mOperationStatus.With(lIgnored).Inc()
 			return nil
@@ -741,7 +763,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			log.Error("Operation not allowed as per configuration")
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
-		key := buildKey(s3io.Bucket, req.Filepath)
+		key := s3io.buildKey(req.Filepath)
 		keyStr := fmt.Sprintf("%s/", key.String())
 		s3, err := s3io.Bucket.S3()
 		if err != nil {
@@ -774,7 +796,7 @@ func (s3io *S3BucketIO) Filecmd(req *sftp.Request) error {
 			log.Error("Operation not allowed as per configuration")
 			return fmt.Errorf("write operation not allowed as per configuration")
 		}
-		key := buildKey(s3io.Bucket, req.Filepath)
+		key := s3io.buildKey(req.Filepath)
 		keyStr := fmt.Sprintf("%s/", key.String())
 		s3, err := s3io.Bucket.S3()
 		if err != nil {
@@ -822,7 +844,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 			log.Error("Operation not allowed as per configuration")
 			return nil, fmt.Errorf("stat operation not allowed as per configuration")
 		}
-		key := buildKey(s3io.Bucket, req.Filepath)
+		key := s3io.buildKey(req.Filepath)
 		log = log.WithFields(logrus.Fields{
 			"bucket": s3io.Bucket.Bucket,
 			"key":    key.String(),
@@ -843,7 +865,7 @@ func (s3io *S3BucketIO) Filelist(req *sftp.Request) (sftp.ListerAt, error) {
 			log.Error("Operation not allowed as per configuration")
 			return nil, fmt.Errorf("listing operation not allowed as per configuration")
 		}
-		prefix := buildKey(s3io.Bucket, req.Filepath)
+		prefix := s3io.buildKey(req.Filepath)
 		log = log.WithFields(logrus.Fields{
 			"bucket": s3io.Bucket.Bucket,
 			"prefix": prefix.String(),

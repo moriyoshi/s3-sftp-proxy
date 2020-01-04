@@ -73,6 +73,7 @@ type S3BucketConfig struct {
 type AuthUser struct {
 	Password             string `toml:"password"`
 	AuthenticationMethod string `toml:"authentication_method"`
+	RootPath             string `toml:"root_path"`
 	PublicKeys           string `toml:"public_keys"`
 	PublicKeyFile        string `toml:"public_key_file"`
 }

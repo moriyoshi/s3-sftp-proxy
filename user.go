@@ -10,36 +10,44 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// User user interface used to authenticate users using several methods
 type User interface {
 	ValidatePassword(pwd []byte) bool
 	GetPublicKeys() []ssh.PublicKey
 	GetName() string
+	GetRootPath() string
 	HasPublicKeys() bool
 	HasPassword() bool
 }
 
+// UserStore user store
 type UserStore struct {
 	Name     string
 	Users    []User
 	usersMap map[string]User
 }
 
+// UserInfo user information
 type UserInfo struct {
-	Addr net.Addr
-	User string
+	Addr     net.Addr
+	User     string
+	RootPath string
 }
 
 func (ui *UserInfo) String() string {
-	return fmt.Sprintf("%s from %s", ui.User, ui.Addr.String())
+	return fmt.Sprintf("%s from %s (root=%s)", ui.User, ui.Addr.String(), ui.RootPath)
 }
 
+// UserStores map of stores of users
 type UserStores map[string]UserStore
 
+// Add adds a user to current store
 func (us *UserStore) Add(u User) {
 	us.Users = append(us.Users, u)
 	us.usersMap[u.GetName()] = u
 }
 
+// Lookup gets a user from current store
 func (us *UserStore) Lookup(name string) User {
 	u, _ := us.usersMap[name]
 	return u
@@ -84,6 +92,7 @@ func buildUsersFromAuthConfigInplace(users []User, aCfg *AuthConfig) ([]User, er
 			users = append(users, &UserBcryptPassword{UserWithPassword{
 				name:       name,
 				password:   params.Password,
+				rootPath:   params.RootPath,
 				publicKeys: pubKeys,
 			},
 			})
@@ -91,6 +100,7 @@ func buildUsersFromAuthConfigInplace(users []User, aCfg *AuthConfig) ([]User, er
 			users = append(users, &UserPlainTextPassword{UserWithPassword{
 				name:       name,
 				password:   params.Password,
+				rootPath:   params.RootPath,
 				publicKeys: pubKeys,
 			},
 			})
@@ -108,6 +118,7 @@ func buildUsersFromAuthConfig(users []User, aCfg *AuthConfig) ([]User, error) {
 	}
 }
 
+// NewUserStoresFromConfig creates a new user stores based on configuration passed as parameter
 func NewUserStoresFromConfig(cfg *S3SFTPProxyConfig) (UserStores, error) {
 	uStores := UserStores{}
 	for name, aCfg := range cfg.AuthConfigs {
@@ -130,6 +141,7 @@ func NewUserStoresFromConfig(cfg *S3SFTPProxyConfig) (UserStores, error) {
 type UserWithPassword struct {
 	name       string
 	password   string
+	rootPath   string
 	publicKeys []ssh.PublicKey
 }
 
@@ -141,6 +153,11 @@ func (u *UserWithPassword) GetPublicKeys() []ssh.PublicKey {
 // GetName gets user name
 func (u *UserWithPassword) GetName() string {
 	return u.name
+}
+
+// GetRootPath root path
+func (u *UserWithPassword) GetRootPath() string {
+	return u.rootPath
 }
 
 // HasPublicKeys wether the user has public keys or not

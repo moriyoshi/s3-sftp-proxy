@@ -58,21 +58,19 @@ func (s *Server) HandleChannel(ctx context.Context, bucket *S3Bucket, sshCh ssh.
 	server := sftp.NewRequestServer(
 		sshCh,
 		asHandlers(
-			&S3BucketIO{
-				Ctx:                      ctx,
-				Bucket:                   bucket,
-				ReaderLookbackBufferSize: s.ReaderLookbackBufferSize,
-				ReaderMinChunkSize:       s.ReaderMinChunkSize,
-				ListerLookbackBufferSize: s.ListerLookbackBufferSize,
-				UploadMemoryBufferPool:   s.UploadMemoryBufferPool,
-				Log:                      log,
-				PhantomObjectMap:         s.PhantomObjectMap,
-				Perms:                    bucket.Perms,
-				ServerSideEncryption:     &bucket.ServerSideEncryption,
-				Now:                      s.Now,
-				UserInfo:                 userInfo,
-				UploadChan:               s.UploadChan,
-			},
+			NewS3BucketIO(
+				ctx,
+				bucket,
+				s.ReaderLookbackBufferSize,
+				s.ReaderMinChunkSize,
+				s.ListerLookbackBufferSize,
+				s.UploadMemoryBufferPool,
+				log,
+				s.PhantomObjectMap,
+				s.Now,
+				userInfo,
+				s.UploadChan,
+			),
 		),
 	)
 
@@ -142,11 +140,6 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 		return err
 	}
 
-	userInfo := &UserInfo{
-		Addr: conn.RemoteAddr(),
-		User: sconn.User(),
-	}
-
 	log = log.WithField("user", sconn.User())
 	log.Info("User logged in")
 	mUsersConnected.Inc()
@@ -154,6 +147,13 @@ func (s *Server) HandleClient(ctx context.Context, conn *net.TCPConn) error {
 	if !ok {
 		log.Error("No bucket designated to user")
 		return fmt.Errorf("unknown error: no bucket designated to user %s found", sconn.User())
+	}
+	u := bucket.Users.Lookup(sconn.User())
+
+	userInfo := &UserInfo{
+		Addr:     conn.RemoteAddr(),
+		User:     sconn.User(),
+		RootPath: u.GetRootPath(),
 	}
 
 	wg := sync.WaitGroup{}
